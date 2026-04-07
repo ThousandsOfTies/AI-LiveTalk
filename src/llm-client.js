@@ -11,20 +11,20 @@ const EMOTION_INSTRUCTION = `
 感情タグは先頭の1回だけ。返答本文の中には入れないでください。`;
 
 const DEFAULTS = {
-  endpoint: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: 'gpt-4o-mini',
+  endpoint: import.meta.env.VITE_LLM_ENDPOINT || 'https://api.openai.com/v1',
+  apiKey:   import.meta.env.VITE_LLM_API_KEY   || '',
+  model:    import.meta.env.VITE_LLM_MODEL      || 'gpt-4o-mini',
   systemPrompt: 'あなたは親切で明るいAIアシスタントです。簡潔に日本語で答えてください。',
   ttsLang: 'ja-JP',
 };
 
 export class LLMClient {
   constructor() {
-    this.endpoint = localStorage.getItem('llm_endpoint') || DEFAULTS.endpoint;
-    this.apiKey = localStorage.getItem('llm_api_key') || DEFAULTS.apiKey;
-    this.model = localStorage.getItem('llm_model') || DEFAULTS.model;
+    this.endpoint     = localStorage.getItem('llm_endpoint')      || DEFAULTS.endpoint;
+    this.apiKey       = localStorage.getItem('llm_api_key')       || DEFAULTS.apiKey;
+    this.model        = localStorage.getItem('llm_model')         || DEFAULTS.model;
     this.systemPrompt = localStorage.getItem('llm_system_prompt') || DEFAULTS.systemPrompt;
-    this.ttsLang = localStorage.getItem('llm_tts_lang') || DEFAULTS.ttsLang;
+    this.ttsLang      = localStorage.getItem('llm_tts_lang')      || DEFAULTS.ttsLang;
     this.history = [];
 
     /** 感情検出時に呼ばれるコールバック @type {function(string):void} */
