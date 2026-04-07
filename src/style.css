@@ -1,0 +1,526 @@
+/* ---- リセット & 基本 ---- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Meiryo', sans-serif;
+  background: #0d0d1a;
+  color: #e0e0f0;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100dvh;
+  position: relative;
+}
+
+/* ---- VRM ビューワー ---- */
+#viewer-panel {
+  flex: 1;
+  position: relative;
+  background: linear-gradient(160deg, #12122a 0%, #0d1526 100%);
+  min-width: 0;
+  transition: background 0.3s;
+}
+
+/* ---- 透過モード ---- */
+html.transparent-mode,
+html.transparent-mode body,
+html.transparent-mode #viewer-panel {
+  background: transparent !important;
+}
+
+/* ---- クロマキーモード (OBS用 緑背景) ---- */
+html.chroma-key-mode,
+html.chroma-key-mode body,
+html.chroma-key-mode #viewer-panel {
+  background: #00ff00 !important;
+}
+
+#chroma-key-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, border-color 0.2s;
+}
+#chroma-key-btn:hover { background: rgba(255,255,255,0.1); }
+#chroma-key-btn.active {
+  border-color: #00cc00;
+  color: #00ff00;
+  background: rgba(0,200,0,0.2);
+}
+
+#bg-toggle-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s, border-color 0.2s;
+}
+#bg-toggle-btn:hover { background: rgba(255,255,255,0.1); }
+#bg-toggle-btn.active {
+  border-color: #6c63ff;
+  color: #b8b0ff;
+  background: rgba(108,99,255,0.15);
+}
+
+#vrm-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#viewer-controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 8px 18px;
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+}
+
+#load-vrm-btn {
+  background: #6c63ff;
+  color: #fff;
+  border: none;
+  padding: 7px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s, opacity 0.2s;
+}
+#load-vrm-btn:hover:not(:disabled) { background: #5a53e0; }
+#load-vrm-btn:disabled { opacity: 0.5; cursor: default; }
+
+#status-indicator {
+  font-size: 12px;
+  color: #999;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- チャットパネル ---- */
+#chat-panel {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: #111120;
+  border-left: 1px solid #1e1e36;
+}
+
+#chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #1e1e36;
+  flex-shrink: 0;
+}
+
+#chat-header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #b8b0ff;
+  letter-spacing: 0.02em;
+}
+
+#settings-btn {
+  background: transparent;
+  border: 1px solid #2a2a48;
+  color: #888;
+  padding: 5px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+}
+#settings-btn:hover { background: #1e1e36; color: #bbb; }
+
+/* ---- メッセージ一覧 ---- */
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-behavior: smooth;
+}
+
+.message {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.message.user { flex-direction: row-reverse; }
+
+.message-avatar {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  padding-bottom: 2px;
+}
+
+.message-bubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.message.user .message-bubble {
+  background: #5a53e0;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.message.assistant .message-bubble {
+  background: #1a1a30;
+  color: #e0e0f0;
+  border-bottom-left-radius: 4px;
+  border: 1px solid #28284a;
+}
+
+/* ---- 入力エリア ---- */
+#chat-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 12px 12px;
+  border-top: 1px solid #1e1e36;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+#chat-input {
+  flex: 1;
+  background: #191930;
+  border: 1px solid #2a2a48;
+  color: #e0e0f0;
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  overflow-y: auto;
+  min-height: 40px;
+  max-height: 120px;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+}
+#chat-input:focus { outline: none; border-color: #6c63ff; }
+#chat-input:disabled { opacity: 0.5; }
+
+#send-btn {
+  background: #6c63ff;
+  color: #fff;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  height: 40px;
+  transition: background 0.2s, opacity 0.2s;
+  flex-shrink: 0;
+}
+#send-btn:hover:not(:disabled) { background: #5a53e0; }
+#send-btn:disabled { opacity: 0.5; cursor: default; }
+
+#mic-btn {
+  background: #191930;
+  border: 1px solid #2a2a48;
+  color: #aaa;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+#mic-btn:hover:not(:disabled) { background: #22223a; }
+#mic-btn:disabled { opacity: 0.4; cursor: default; }
+#mic-btn.active {
+  background: #c0392b;
+  border-color: #e74c3c;
+  color: #fff;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(231, 76, 60, 0); }
+}
+
+/* ---- 設定パネル (オーバーレイ) ---- */
+#settings-panel {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+#settings-inner {
+  background: #131325;
+  border: 1px solid #2a2a48;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+#settings-inner h2 {
+  font-size: 17px;
+  color: #b8b0ff;
+  font-weight: 700;
+}
+
+#settings-inner label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #888;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.hint {
+  font-size: 11px;
+  color: #555;
+  font-weight: 400;
+}
+
+#settings-inner input,
+#settings-inner select,
+#settings-inner textarea {
+  background: #191930;
+  border: 1px solid #2a2a48;
+  color: #e0e0f0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+#settings-inner input:focus,
+#settings-inner select:focus,
+#settings-inner textarea:focus {
+  outline: none;
+  border-color: #6c63ff;
+}
+#settings-inner textarea { resize: vertical; }
+#settings-inner select { cursor: pointer; }
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+#save-settings-btn {
+  flex: 1;
+  background: #6c63ff;
+  color: #fff;
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+#save-settings-btn:hover { background: #5a53e0; }
+
+#cancel-settings-btn {
+  background: #191930;
+  color: #888;
+  border: 1px solid #2a2a48;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+#cancel-settings-btn:hover { background: #22223a; }
+
+#clear-history-btn {
+  background: #2a0a0a;
+  color: #e24;
+  border: 1px solid #3a1414;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+#clear-history-btn:hover { background: #3a1010; }
+
+#gesture-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.gesture-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+  line-height: 1;
+}
+.gesture-btn:hover { background: rgba(255,255,255,0.18); transform: scale(1.1); }
+.gesture-btn:active { transform: scale(0.92); }
+
+#vrma-preset-select {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: #e8e8f8;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  max-width: 140px;
+}
+#vrma-preset-select:focus { outline: none; border-color: #6c7aff; }
+#vrma-preset-select option { background: #1a1a2e; color: #e8e8f8; }
+
+#aivis-check-btn {
+  background: #1a2a1a;
+  color: #6c6;
+  border: 1px solid #2a4a2a;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+#aivis-check-btn:hover { background: #223322; }
+
+/* ---- ユーティリティ ---- */
+.hidden { display: none !important; }
+
+/* ---- スクロールバー ---- */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a48; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a60; }
+
+/* ---- モバイル対応 ---- */
+@media (max-width: 640px) {
+  #app {
+    flex-direction: column;
+  }
+
+  #viewer-panel {
+    flex: 0 0 45dvh;
+    min-height: 0;
+  }
+
+  #chat-panel {
+    width: 100%;
+    flex: 1;
+    border-left: none;
+    border-top: 1px solid #1e1e36;
+    min-height: 0;
+  }
+
+  #viewer-controls {
+    gap: 6px;
+    padding: 6px 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    border-radius: 16px;
+    max-width: 94vw;
+  }
+
+  #load-vrm-btn,
+  #load-vrma-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  #vrma-preset-select {
+    max-width: 100px;
+    font-size: 11px;
+  }
+
+  #status-indicator {
+    font-size: 11px;
+    max-width: 140px;
+  }
+
+  #gesture-btns {
+    gap: 4px;
+  }
+
+  .gesture-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+
+  #chat-header h1 {
+    font-size: 13px;
+  }
+
+  #chat-messages {
+    padding: 10px 8px;
+    gap: 10px;
+  }
+
+  .message-bubble {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  #settings-inner {
+    width: min(400px, 96vw);
+    padding: 16px;
+  }
+}

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.*
+
+
+# ⚠️ VRMAファイルはPixiv著作権あり（パブリックリポジトリには含めない）
+# public/vrma/
+
+# VRMモデル（自分のキャラクターなら上げてOK）
+# public/CamomeCamome/
