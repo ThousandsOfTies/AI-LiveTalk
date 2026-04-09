@@ -460,17 +460,13 @@ html.chroma-key-mode #viewer-panel {
   /* viewer-panel を縦並びにしてコントロールをキャンバス下に配置 */
   #viewer-panel {
     flex: 0 0 auto;
-    min-height: 0;
     display: flex;
     flex-direction: column;
   }
 
-  /* キャンバスは viewer-panel の残り空間を埋める (最大 40dvh) */
+  /* キャンバスは明示的な高さで固定 (flex shorthand は使わない) */
   #vrm-canvas {
-    flex: 1 1 0;
-    min-height: 0;
     height: 40dvh;
-    max-height: 40dvh;
   }
 
   /* コントロールバー: 絶対配置を解除して通常フローへ */

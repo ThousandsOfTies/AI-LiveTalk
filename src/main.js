@@ -56,14 +56,25 @@ vrmFileInput.addEventListener('change', async (e) => {
   loadVrmBtn.disabled = true;
   try {
     await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
-    setStatus('デフォルトモーション適用中...');
-    await viewer.loadVRMA('/vrma/VRMA_03.vrma', { loop: true });
-    stopVRMABtn.classList.remove('hidden');
-    vrmaPresetSelect.value = '/vrma/VRMA_03.vrma';
     setStatus('準備完了');
   } catch (err) {
     setStatus(`読み込みエラー: ${err.message}`);
     console.error(err);
+    loadVrmBtn.disabled = false;
+    vrmFileInput.value = '';
+    return;
+  }
+  // デフォルトモーション (失敗してもVRM読み込み自体は成功扱い)
+  try {
+    setStatus('デフォルトモーション適用中...');
+    const vrmaUrl = import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma';
+    await viewer.loadVRMA(vrmaUrl, { loop: true });
+    stopVRMABtn.classList.remove('hidden');
+    vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
+    setStatus('準備完了');
+  } catch (vrmaErr) {
+    console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
+    setStatus('準備完了');
   } finally {
     loadVrmBtn.disabled = false;
     vrmFileInput.value = '';
@@ -100,11 +111,11 @@ stopVRMABtn.addEventListener('click', () => {
 
 // ---- VRMAプリセット選択 ----
 vrmaPresetSelect.addEventListener('change', async () => {
-  const url = vrmaPresetSelect.value;
-  if (!url) return;
+  const path = vrmaPresetSelect.value;
+  if (!path) return;
   setStatus('モーション読み込み中...');
   try {
-    await viewer.loadVRMA(url);
+    await viewer.loadVRMA(import.meta.env.BASE_URL + path);
     setStatus('アニメーション再生中');
     stopVRMABtn.classList.remove('hidden');
   } catch (err) {
