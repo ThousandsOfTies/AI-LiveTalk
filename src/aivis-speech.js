@@ -6,6 +6,28 @@
  * デフォルト: http://localhost:10101
  */
 
+// モジュール共通: デバイスボリューム監視
+// iOS Safari では <video> 要素の volumechange イベントがハードウェアボリューム変更時に発火する
+const _gainNodes = new Set();
+
+function _syncDeviceVolume() {
+  if (typeof document === 'undefined') return;
+  if (document.querySelector('[data-vrllm-vol]')) return; // 二重初期化防止
+
+  const el = document.createElement('video');
+  el.dataset.vrllmVol = '1';
+  el.setAttribute('playsinline', 'true');
+  // opacity:0 では iOS がイベントを送らない場合があるため限りなく透明に
+  el.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0.001;pointer-events:none;';
+  document.body.appendChild(el);
+
+  el.addEventListener('volumechange', () => {
+    for (const node of _gainNodes) {
+      node.gain.value = el.volume;
+    }
+  });
+}
+
 export class AivisSpeechClient {
   /**
    * @param {string} baseUrl  例: 'http://localhost:10101'
@@ -15,13 +37,19 @@ export class AivisSpeechClient {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.speakerId = speakerId;
     this._audioCtx = null;
+    this._gainNode = null;
     this._currentSource = null;
   }
 
   /** AudioContext を遅延初期化（ユーザー操作後でないと使えないため） */
   async _getAudioCtx() {
     if (!this._audioCtx || this._audioCtx.state === 'closed') {
+      if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
       this._audioCtx = new AudioContext();
+      this._gainNode = this._audioCtx.createGain();
+      this._gainNode.connect(this._audioCtx.destination);
+      _gainNodes.add(this._gainNode);
+      _syncDeviceVolume();
     }
     if (this._audioCtx.state === 'suspended') {
       await this._audioCtx.resume();  // ← Chrome の自動再生ポリシー対応
@@ -101,7 +129,7 @@ export class AivisSpeechClient {
     return new Promise((resolve) => {
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(audioCtx.destination);
+      source.connect(this._gainNode);
 
       this._currentSource = source;
 
@@ -139,13 +167,19 @@ export class AivisCloudClient {
     this.apiKey    = apiKey;
     this.modelUuid = modelUuid;
     this._audioCtx      = null;
+    this._gainNode      = null;
     this._currentSource = null;
   }
 
   /** AudioContext を遅延初期化 */
   async _getAudioCtx() {
     if (!this._audioCtx || this._audioCtx.state === 'closed') {
+      if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
       this._audioCtx = new AudioContext();
+      this._gainNode = this._audioCtx.createGain();
+      this._gainNode.connect(this._audioCtx.destination);
+      _gainNodes.add(this._gainNode);
+      _syncDeviceVolume();
     }
     if (this._audioCtx.state === 'suspended') {
       await this._audioCtx.resume();
@@ -203,7 +237,7 @@ export class AivisCloudClient {
     return new Promise((resolve) => {
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(audioCtx.destination);
+      source.connect(this._gainNode);
       this._currentSource = source;
       source.onended = () => {
         this._currentSource = null;

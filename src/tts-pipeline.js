@@ -190,7 +190,7 @@ export class TTSPipeline {
     return new Promise(resolve => {
       const src = audioCtx.createBufferSource();
       src.buffer = audioBuffer;
-      src.connect(audioCtx.destination);
+      src.connect(client._gainNode);
       this._currentSrc = src;
       src.onended = () => {
         this._currentSrc = null;
