@@ -9,5 +9,7 @@ dist/
 # ⚠️ VRMAファイルはPixiv著作権あり（パブリックリポジトリには含めない）
 # public/vrma/
 
-# VRMモデル（自分のキャラクターなら上げてOK）
-# public/CamomeCamome/
+# BVH変換スクリプト・ツール類（リポジトリ対象外）
+*.py
+*.bat
+VRM_Addon_for_Blender.zip

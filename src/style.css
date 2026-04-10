@@ -42,6 +42,98 @@ html.chroma-key-mode #viewer-panel {
   background: #00ff00 !important;
 }
 
+/* ---- 背景プリセット ---- */
+#viewer-panel.bg-sky {
+  background: linear-gradient(180deg,
+    #4fc3f7 0%, #81d4fa 25%, #b3e5fc 55%, #e1f5e1 80%, #c8e6c9 100%
+  ) !important;
+}
+#viewer-panel.bg-sunset {
+  background: linear-gradient(180deg,
+    #1a1a3e 0%, #6a1a6a 15%, #c0392b 30%, #e67e22 50%, #f39c12 65%, #f9ca24 80%, #ffeaa7 100%
+  ) !important;
+}
+#viewer-panel.bg-night {
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(255,255,200,0.15) 0%, transparent 4%),
+    radial-gradient(ellipse at 60% 8%,  rgba(255,255,200,0.12) 0%, transparent 3%),
+    radial-gradient(ellipse at 80% 20%, rgba(255,255,200,0.10) 0%, transparent 3%),
+    radial-gradient(ellipse at 40% 5%,  rgba(255,255,200,0.13) 0%, transparent 2%),
+    radial-gradient(ellipse at 10% 30%, rgba(255,255,200,0.08) 0%, transparent 2%),
+    radial-gradient(ellipse at 90% 10%, rgba(255,255,200,0.10) 0%, transparent 2%),
+    linear-gradient(180deg, #020818 0%, #0a1628 30%, #0d1f3c 60%, #1a2a1a 100%) !important;
+}
+#viewer-panel.bg-aurora {
+  background: linear-gradient(180deg,
+    #010d0a 0%, #012a1a 20%, #014d2a 35%,
+    #00b894 45%, #00cec9 55%, #6c5ce7 70%,
+    #0a0a2a 85%, #050510 100%
+  ) !important;
+  animation: aurora-shift 8s ease-in-out infinite alternate;
+}
+@keyframes aurora-shift {
+  0%   { filter: hue-rotate(0deg) brightness(1.0); }
+  100% { filter: hue-rotate(30deg) brightness(1.15); }
+}
+#viewer-panel.bg-forest {
+  background: linear-gradient(180deg,
+    #87ceeb 0%, #b0d9f0 20%, #7cb87a 45%, #4a8c48 65%, #2d5a1b 85%, #1a3a0e 100%
+  ) !important;
+}
+#viewer-panel.bg-sakura {
+  background: linear-gradient(180deg,
+    #fce4ec 0%, #f8bbd0 20%, #f48fb1 45%, #ffccbc 65%, #ffe0b2 85%, #fff9c4 100%
+  ) !important;
+}
+
+/* ---- 背景ピッカーUI ---- */
+#bg-picker-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc;
+  padding: 5px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.2s;
+  position: relative;
+}
+#bg-picker-btn:hover { background: rgba(255,255,255,0.1); }
+#bg-picker-btn.active { border-color: #6c63ff; color: #b8b0ff; }
+
+#bg-picker-panel {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10,10,30,0.92);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  backdrop-filter: blur(12px);
+  z-index: 100;
+  white-space: nowrap;
+}
+
+.bg-preset-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.bg-preset-btn:hover { transform: scale(1.2); border-color: rgba(255,255,255,0.5); }
+.bg-preset-btn.active { border-color: #6c63ff; background: rgba(108,99,255,0.25); }
+
 #chroma-key-btn {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.2);

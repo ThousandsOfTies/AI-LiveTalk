@@ -28,9 +28,19 @@
           <option value="vrma/VRMA_07.vrma">07 屈伸運動</option>
         </select>
         <button id="stop-vrma-btn" class="hidden" title="アニメーション停止">⏹ 停止</button>
-        <button id="bg-toggle-btn" title="背景を透過/非透過で切り替え">🔲 背景</button>
+        <button id="bg-picker-btn" title="背景を選択">🖼 背景</button>
         <button id="chroma-key-btn" title="OBSクロマキー用グリーンバック">🟩 緑背景</button>
-        <span id="status-indicator">VRMファイルを読み込んでください</span>
+        <div id="bg-picker-panel" class="hidden">
+          <button class="bg-preset-btn" data-bg="dark"     title="夜（デフォルト）">🌑</button>
+          <button class="bg-preset-btn" data-bg="sky"      title="青空">☀️</button>
+          <button class="bg-preset-btn" data-bg="sunset"   title="夕焼け">🌅</button>
+          <button class="bg-preset-btn" data-bg="night"    title="夜空">🌌</button>
+          <button class="bg-preset-btn" data-bg="aurora"   title="オーロラ">🌿</button>
+          <button class="bg-preset-btn" data-bg="forest"   title="森">🌲</button>
+          <button class="bg-preset-btn" data-bg="sakura"   title="桜">🌸</button>
+          <button class="bg-preset-btn" data-bg="transparent" title="透過">🔲</button>
+        </div>
+        <span id="status-indicator">読み込み中...</span>
         <div id="gesture-btns">
           <button class="gesture-btn" data-gesture="nod"       title="うなずく">👍</button>
           <button class="gesture-btn" data-gesture="shake"     title="首を振る">🙅</button>

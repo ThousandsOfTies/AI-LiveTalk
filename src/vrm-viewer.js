@@ -20,6 +20,9 @@ export class VRMViewer {
     this._initControls();
     this._initLights();
 
+    // アイドル VRMA パス（感情モーション終了後に戻る）
+    this._idleVrmaUrl = null;
+
     // アイドルアニメーション用
     this._blinkTimer = 0;
     this._blinkInterval = 3 + Math.random() * 3;
@@ -120,9 +123,26 @@ export class VRMViewer {
 
     if (source instanceof File) URL.revokeObjectURL(url);
 
+    // 上腕の初期Z角度を検出してアイドルモーションのベース値を決める
+    // Tポーズ(腕水平)なら ~0、Aポーズ/腕下ろし済みなら ~1.2 に近い値が入っている
+    this._armBaseZ = this._detectArmBaseZ(vrm);
+
     this._fitCameraToVRM(vrm);
 
     return vrm;
+  }
+
+  /**
+   * モデルの上腕ボーン初期角度を読み取り、アイドルモーション用のベースZ値を返す
+   * Tポーズ(腕水平)→ 1.2、Aポーズ/腕下ろし済み → 0 に近い値
+   */
+  _detectArmBaseZ(vrm) {
+    const node = vrm.humanoid?.getNormalizedBoneNode('leftUpperArm');
+    if (!node) return 0.0;
+    // ロード直後の初期回転Z（ラジアン）をそのままベースに使う
+    const initialZ = Math.abs(node.rotation.z);
+    // 0.3 未満ならAポーズ/腕下ろし系、それ以上ならTポーズ系
+    return initialZ < 0.3 ? 0.0 : 1.2;
   }
 
   /** モデルのバウンディングボックスに合わせてカメラと OrbitControls を自動調整 */
@@ -154,10 +174,15 @@ export class VRMViewer {
    * @param {File|string} source
    * @param {{ loop?: boolean }} options
    */
-  async loadVRMA(source, { loop = true } = {}) {
+  async loadVRMA(source, { loop = true, isIdle = false } = {}) {
     if (!this.vrm) throw new Error('先にVRMを読み込んでください');
 
     this.stopVRMA();
+
+    // アイドルモーションとして登録
+    if (isIdle && typeof source === 'string') {
+      this._idleVrmaUrl = source;
+    }
 
     const loader = new GLTFLoader();
     loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
@@ -177,6 +202,15 @@ export class VRMViewer {
       if (!loop) {
         this._vrmaAction.setLoop(THREE.LoopOnce, 1);
         this._vrmaAction.clampWhenFinished = true;
+        // 再生終了時にアイドルモーションへ戻る
+        this._mixer.addEventListener('finished', () => {
+          this.resetExpressions();
+          if (this._idleVrmaUrl) {
+            this.loadVRMA(this._idleVrmaUrl, { loop: true });
+          } else {
+            this.stopVRMA();
+          }
+        });
       }
 
       this._vrmaAction.play();
@@ -215,17 +249,16 @@ export class VRMViewer {
    */
   applyEmotion(emotion) {
     const MAP = {
-      happy:     { expr: 'happy',     intensity: 0.75, gesture: 'nod'       },
-      sad:       { expr: 'sad',       intensity: 0.65, gesture: null        },
-      angry:     { expr: 'angry',     intensity: 0.6,  gesture: 'shake'     },
-      surprised: { expr: 'surprised', intensity: 0.8,  gesture: 'surprised' },
-      relaxed:   { expr: 'relaxed',   intensity: 0.6,  gesture: null        },
-      neutral:   { expr: null,        intensity: 0,    gesture: null        },
+      happy:     { expr: 'happy',     intensity: 0.75 },
+      sad:       { expr: 'sad',       intensity: 0.65 },
+      angry:     { expr: 'angry',     intensity: 0.6  },
+      surprised: { expr: 'surprised', intensity: 0.8  },
+      relaxed:   { expr: 'relaxed',   intensity: 0.6  },
+      neutral:   { expr: null,        intensity: 0    },
     };
     const entry = MAP[emotion] ?? MAP['neutral'];
     this.resetExpressions();
     if (entry.expr) this.setExpression(entry.expr, entry.intensity);
-    if (entry.gesture) this.playGesture(entry.gesture);
   }
 
   /** 口の形（リップシンク）
@@ -289,7 +322,7 @@ export class VRMViewer {
    * @param {'nod'|'shake'|'wave'|'surprised'} name
    */
   playGesture(name) {
-    const durations = { nod: 1.0, shake: 1.2, wave: 2.0, surprised: 0.8 };
+    const durations = { nod: 1.0, shake: 1.2, wave: 2.0, surprised: 0.9, droop: 2.0, stretch: 2.5 };
     this._gesture = { name, progress: 0, duration: durations[name] ?? 1.0 };
   }
 
@@ -327,9 +360,10 @@ export class VRMViewer {
     _rot(h, 'leftShoulder',  { z:  Math.sin(t * 0.4) * shoulderAmp });
     _rot(h, 'rightShoulder', { z: -Math.sin(t * 0.4 + 0.3) * shoulderAmp });
 
-    // --- 上腕 (自然な下げ: z≒1.2 rad ≒ 70°) ---
-    _rot(h, 'leftUpperArm',  { z:  1.2 + Math.sin(t * 0.5) * armAmp, x:  0.05 });
-    _rot(h, 'rightUpperArm', { z: -1.2 - Math.sin(t * 0.5 + 0.4) * armAmp, x:  0.05 });
+    // --- 上腕 (z=0がAポーズ/腕下ろし系モデルの自然位置、Tポーズ系は1.2が適切) ---
+    const armBaseZ = this._armBaseZ ?? 0.0;
+    _rot(h, 'leftUpperArm',  { z:  armBaseZ + Math.sin(t * 0.5) * armAmp, x:  0.05 });
+    _rot(h, 'rightUpperArm', { z: -armBaseZ - Math.sin(t * 0.5 + 0.4) * armAmp, x:  0.05 });
 
     // --- 前腕 ---
     _rot(h, 'leftLowerArm',  { z:  0.1 + Math.sin(t * 0.6) * 0.03 });
@@ -357,9 +391,29 @@ export class VRMViewer {
       _rot(h, 'rightUpperArm', { z: angle, x: -0.3 });
       _rot(h, 'rightLowerArm', { z: -0.5 + Math.sin(p * Math.PI * 4) * 0.3 });
     } else if (g.name === 'surprised') {
+      // 頭を引いて両腕を広げる（モデルに表情がない分を動きで補う）
       const v = Math.max(0, Math.sin(p * Math.PI));
-      _rot(h, 'head', { x: -v * 0.15 });
+      _rot(h, 'head', { x: -v * 0.22 });
+      _rot(h, 'neck', { x: -v * 0.1 });
+      _rot(h, 'leftUpperArm',  { z:  1.2 - v * 0.5, x: -v * 0.15 });
+      _rot(h, 'rightUpperArm', { z: -1.2 + v * 0.5, x: -v * 0.15 });
       this.vrm.expressionManager?.setValue('surprised', v * 0.8);
+    } else if (g.name === 'droop') {
+      // 悲しみ: 頭をゆっくり垂れて肩を落とす
+      const fadeIn  = Math.min(p / 0.4, 1);
+      const fadeOut = Math.max(0, 1 - (p - 0.7) / 0.3);
+      const v = fadeIn * (p < 0.7 ? 1 : fadeOut);
+      _rot(h, 'head',  { x: v * 0.28 });
+      _rot(h, 'neck',  { x: v * 0.12 });
+      _rot(h, 'chest', { x: v * 0.06 });
+      _rot(h, 'leftUpperArm',  { z: 1.2 + v * 0.18 });
+      _rot(h, 'rightUpperArm', { z: -1.2 - v * 0.18 });
+    } else if (g.name === 'stretch') {
+      // リラックス: 両腕をゆっくり広げて戻す
+      const v = Math.sin(p * Math.PI);
+      _rot(h, 'leftUpperArm',  { z: 1.2 - v * 0.5, x: -v * 0.1 });
+      _rot(h, 'rightUpperArm', { z: -1.2 + v * 0.5, x: -v * 0.1 });
+      _rot(h, 'head', { x: -v * 0.06 });
     }
 
     if (p >= 1) {

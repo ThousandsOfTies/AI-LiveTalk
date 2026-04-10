@@ -12,9 +12,9 @@ const EMOTION_INSTRUCTION = `
 
 const DEFAULTS = {
   endpoint: import.meta.env.VITE_LLM_ENDPOINT || 'https://api.openai.com/v1',
-  apiKey:   import.meta.env.VITE_LLM_API_KEY   || '',
-  model:    import.meta.env.VITE_LLM_MODEL      || 'gpt-4o-mini',
-  systemPrompt: `あなたは私の親しい友達です。タメ口で、フレンドリーにおしゃべりしてください。
+  apiKey: import.meta.env.VITE_LLM_API_KEY || '',
+  model: import.meta.env.VITE_LLM_MODEL || 'gpt-4o-mini',
+  systemPrompt: `あなたの名前はリリムです。あなたは私の親しい友達です。タメ口で、フレンドリーにおしゃべりしてください。
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,
   ttsLang: 'ja-JP',
@@ -22,11 +22,11 @@ AIアシスタントのような「何かお手伝いしましょうか？」と
 
 export class LLMClient {
   constructor() {
-    this.endpoint     = localStorage.getItem('llm_endpoint')      || DEFAULTS.endpoint;
-    this.apiKey       = localStorage.getItem('llm_api_key')       || DEFAULTS.apiKey;
-    this.model        = localStorage.getItem('llm_model')         || DEFAULTS.model;
+    this.endpoint = localStorage.getItem('llm_endpoint') || DEFAULTS.endpoint;
+    this.apiKey = localStorage.getItem('llm_api_key') || DEFAULTS.apiKey;
+    this.model = localStorage.getItem('llm_model') || DEFAULTS.model;
     this.systemPrompt = localStorage.getItem('llm_system_prompt') || DEFAULTS.systemPrompt;
-    this.ttsLang      = localStorage.getItem('llm_tts_lang')      || DEFAULTS.ttsLang;
+    this.ttsLang = localStorage.getItem('llm_tts_lang') || DEFAULTS.ttsLang;
     this.history = [];
 
     /** 感情検出時に呼ばれるコールバック @type {function(string):void} */

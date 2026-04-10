@@ -29,14 +29,45 @@ const saveSettingsBtn = document.getElementById('save-settings-btn');
 const cancelSettingsBtn = document.getElementById('cancel-settings-btn');
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 const statusEl = document.getElementById('status-indicator');
-const bgToggleBtn = document.getElementById('bg-toggle-btn');
+const bgPickerBtn = document.getElementById('bg-picker-btn');
+const bgPickerPanel = document.getElementById('bg-picker-panel');
 
-// ---- 背景透過トグル ----
-bgToggleBtn.addEventListener('click', () => {
-  const isTransparent = document.documentElement.classList.toggle('transparent-mode');
-  bgToggleBtn.classList.toggle('active', isTransparent);
-  bgToggleBtn.title = isTransparent ? '背景を元に戻す' : '背景を透過/非透過で切り替え';
+// ---- 背景ピッカー ----
+const viewerPanel = document.getElementById('viewer-panel');
+const BG_PRESETS = ['dark', 'sky', 'sunset', 'night', 'aurora', 'forest', 'sakura', 'transparent'];
+
+function applyBg(bg) {
+  BG_PRESETS.forEach(b => viewerPanel.classList.remove(`bg-${b}`));
+  document.documentElement.classList.remove('transparent-mode');
+  if (bg === 'transparent') {
+    document.documentElement.classList.add('transparent-mode');
+  } else if (bg !== 'dark') {
+    viewerPanel.classList.add(`bg-${bg}`);
+  }
+  document.querySelectorAll('.bg-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.bg === bg);
+  });
+  bgPickerBtn.classList.toggle('active', bg !== 'dark');
+  localStorage.setItem('bg_preset', bg);
+}
+
+bgPickerBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  bgPickerPanel.classList.toggle('hidden');
 });
+
+document.querySelectorAll('.bg-preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    applyBg(btn.dataset.bg);
+    bgPickerPanel.classList.add('hidden');
+  });
+});
+
+document.addEventListener('click', () => bgPickerPanel.classList.add('hidden'));
+bgPickerPanel.addEventListener('click', e => e.stopPropagation());
+
+// 保存済み背景を復元
+applyBg(localStorage.getItem('bg_preset') ?? 'dark');
 
 // ---- クロマキー (OBS緑背景) トグル ----
 const chromaKeyBtn = document.getElementById('chroma-key-btn');
@@ -48,6 +79,24 @@ chromaKeyBtn.addEventListener('click', () => {
 
 // ---- VRM 読み込み ----
 loadVrmBtn.addEventListener('click', () => vrmFileInput.click());
+
+async function loadBuiltinVRM() {
+  setStatus('モデルを読み込み中...');
+  loadVrmBtn.disabled = true;
+  try {
+    await viewer.loadVRM('/vrm/Lilym.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
+    setStatus('デフォルトモーション適用中...');
+    await viewer.loadVRMA('/vrma/VRMA_03.vrma', { loop: true, isIdle: true });
+    stopVRMABtn.classList.remove('hidden');
+    vrmaPresetSelect.value = '';
+    setStatus('準備完了');
+  } catch (err) {
+    setStatus(`モデル読み込みエラー: ${err.message}`);
+    console.error(err);
+  } finally {
+    loadVrmBtn.disabled = false;
+  }
+}
 
 vrmFileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
@@ -80,6 +129,9 @@ vrmFileInput.addEventListener('change', async (e) => {
     vrmFileInput.value = '';
   }
 });
+
+// 起動時にビルトインモデルを自動ロード
+loadBuiltinVRM();
 
 // ---- VRMA 読み込み ----
 loadVRMABtn.addEventListener('click', () => vrmaFileInput.click());
