@@ -396,15 +396,16 @@ body {
 
   /* viewer-panel を縦並びにしてコントロールをキャンバス下に配置 */
   #viewer-panel {
-    flex: 0 0 auto;
+    flex: 0 0 45%;
     display: flex;
     flex-direction: column;
     padding-top: env(safe-area-inset-top);
   }
 
-  /* キャンバスは明示的な高さで固定 */
+  /* キャンバスはviewer-panelを全部使う */
   #vrm-canvas {
-    height: 45dvh;
+    flex: 1;
+    height: auto;
   }
 
   /* コントロールバー: 絶対配置を解除して通常フローへ */
