@@ -327,6 +327,8 @@ if (navigator.maxTouchPoints > 0) {
     setTimeout(() => {
       viewerPanel.style.display = '';
       viewer.resize();
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
     }, 300);
   });
 }

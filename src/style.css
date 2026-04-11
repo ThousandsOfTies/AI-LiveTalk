@@ -23,6 +23,7 @@ body {
   display: flex;
   position: fixed;
   inset: 0;
+  overflow: hidden;
 }
 
 /* ---- VRM ビューワー ---- */
