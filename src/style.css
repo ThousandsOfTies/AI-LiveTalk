@@ -16,8 +16,8 @@ body {
 
 #app {
   display: flex;
-  height: 100dvh;
-  position: relative;
+  position: fixed;
+  inset: 0;
 }
 
 /* ---- VRM ビューワー ---- */
