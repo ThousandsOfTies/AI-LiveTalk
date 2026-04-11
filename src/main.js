@@ -41,8 +41,6 @@ async function loadBuiltinVRM() {
     setStatus('デフォルトモーション適用中...');
     await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
     vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
-    // レイアウト確定後（dvh計算含む）に再フィット
-    requestAnimationFrame(() => viewer.fitCamera());
     setStatus('');
   } catch (err) {
     setStatus(`モデル読み込みエラー: ${err.message}`);
@@ -319,7 +317,7 @@ window.addEventListener('resize', () => viewer.resize());
 
 // ---- モバイル: キーボード表示をfocus/blurで制御 ----
 // visualViewport より確実。タッチデバイスのみ適用。
-// キーボード開閉はfocus/blurで制御。カメラリフィットはResizeObserverが担当。
+// キーボード開閉はfocus/blurで制御
 if (navigator.maxTouchPoints > 0) {
   chatInput.addEventListener('focus', () => {
     document.documentElement.classList.add('keyboard-open');

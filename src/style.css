@@ -467,12 +467,10 @@ body {
     padding: 16px;
   }
 
-  /* キーボード表示時: 3Dビューワーを折りたたむ */
-  html.keyboard-open #vrm-canvas {
-    height: 0 !important;
-  }
-
-  html.keyboard-open #viewer-controls {
-    display: none !important;
+  /* キーボード表示時: 3Dビューワーを非表示 */
+  html.keyboard-open #viewer-panel {
+    height: 0;
+    overflow: hidden;
+    padding-top: 0;
   }
 }
