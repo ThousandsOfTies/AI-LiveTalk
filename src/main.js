@@ -319,18 +319,13 @@ window.addEventListener('resize', () => viewer.resize());
 
 // ---- モバイル: キーボード表示をfocus/blurで制御 ----
 // visualViewport より確実。タッチデバイスのみ適用。
+// キーボード開閉はfocus/blurで制御。カメラリフィットはResizeObserverが担当。
 if (navigator.maxTouchPoints > 0) {
   chatInput.addEventListener('focus', () => {
     document.documentElement.classList.add('keyboard-open');
   });
-
   chatInput.addEventListener('blur', () => {
     document.documentElement.classList.remove('keyboard-open');
-    // レイアウト確定後にresize & カメラリフィット
-    requestAnimationFrame(() => {
-      viewer.resize();
-      viewer.fitCamera();
-    });
   });
 }
 

@@ -37,14 +37,19 @@ export class VRMViewer {
     this._vrmaAction = null;
     this._vrmaPlaying = false;
 
-    // canvasサイズが確定したタイミングで自動フィット（iOS dvh遅延対策）
+    // canvasサイズ変化を監視して自動リフィット
+    // 特に「高さ0→非0」（キーボード閉じ後）のタイミングで確実にカメラを合わせる
     this._fitPending = false;
+    let _prevH = 0;
     const ro = new ResizeObserver(() => {
+      const h = this.canvas.clientHeight;
+      const w = this.canvas.clientWidth;
       this.resize();
-      if (this._fitPending && this.vrm && this.canvas.clientWidth > 0 && this.canvas.clientHeight > 0) {
+      if (this.vrm && w > 0 && h > 0 && (_prevH === 0 || this._fitPending)) {
         this._fitPending = false;
         this._fitCameraToVRM(this.vrm);
       }
+      _prevH = h;
     });
     ro.observe(this.canvas);
 
@@ -133,8 +138,6 @@ export class VRMViewer {
     // 上腕の初期Z角度を検出してアイドルモーションのベース値を決める
     // Tポーズ(腕水平)なら ~0、Aポーズ/腕下ろし済みなら ~1.2 に近い値が入っている
     this._armBaseZ = this._detectArmBaseZ(vrm);
-
-    this._fitPending = true; // ResizeObserver経由でも再フィットできるよう先にセット
     this._fitCameraToVRM(vrm);
 
     return vrm;
@@ -156,11 +159,11 @@ export class VRMViewer {
   /** モデルのバウンディングボックスに合わせてカメラと OrbitControls を自動調整 */
   _fitCameraToVRM(vrm) {
     this.resize();
-    // canvasがまだレイアウト未確定の場合はResizeObserverに委ねる
     if (this.canvas.clientWidth === 0 || this.canvas.clientHeight === 0) {
       this._fitPending = true;
       return;
     }
+    this._fitPending = false;
 
     // ワールド行列を確定してからメッシュのみでbboxを計算
     // (ボーン・ヘルパーを含めると中心がズレるため)
