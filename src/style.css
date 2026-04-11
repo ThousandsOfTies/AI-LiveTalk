@@ -403,7 +403,7 @@ body {
 
   /* キャンバスは明示的な高さで固定 (flex shorthand は使わない) */
   #vrm-canvas {
-    height: 40dvh;
+    height: 45dvh;
     transition: height 0.25s ease;
   }
 

@@ -143,6 +143,9 @@ export class VRMViewer {
 
   /** モデルのバウンディングボックスに合わせてカメラと OrbitControls を自動調整 */
   _fitCameraToVRM(vrm) {
+    // フィット計算前に実際のcanvasサイズへ同期（初期ロード時にレイアウト未確定の場合の対策）
+    this.resize();
+
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
