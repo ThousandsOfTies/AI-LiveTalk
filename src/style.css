@@ -399,8 +399,6 @@ body {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    /* Dynamic Island / ノッチの高さ分だけ上部に余白を確保 */
-    padding-top: env(safe-area-inset-top);
   }
 
   /* キャンバスは明示的な高さで固定 */
