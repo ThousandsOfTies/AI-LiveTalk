@@ -324,9 +324,9 @@ if (navigator.maxTouchPoints > 0) {
     viewerPanel.style.display = 'none';
   });
   chatInput.addEventListener('blur', () => {
-    // iOSのキーボード閉じアニメーション(約250ms)完了後に再表示
     setTimeout(() => {
       viewerPanel.style.display = '';
+      viewer.resize();
     }, 300);
   });
 }
