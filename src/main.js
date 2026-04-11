@@ -18,7 +18,6 @@ const vrmFileInput = document.getElementById('vrm-file-input');
 const loadVRMABtn = document.getElementById('load-vrma-btn');
 const vrmaFileInput = document.getElementById('vrma-file-input');
 const vrmaPresetSelect = document.getElementById('vrma-preset-select');
-const stopVRMABtn = document.getElementById('stop-vrma-btn');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
 const micBtn = document.getElementById('mic-btn');
@@ -29,53 +28,7 @@ const saveSettingsBtn = document.getElementById('save-settings-btn');
 const cancelSettingsBtn = document.getElementById('cancel-settings-btn');
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 const statusEl = document.getElementById('status-indicator');
-const bgPickerBtn = document.getElementById('bg-picker-btn');
-const bgPickerPanel = document.getElementById('bg-picker-panel');
-
-// ---- 背景ピッカー ----
-const viewerPanel = document.getElementById('viewer-panel');
-const BG_PRESETS = ['dark', 'sky', 'sunset', 'night', 'aurora', 'forest', 'sakura', 'transparent'];
-
-function applyBg(bg) {
-  BG_PRESETS.forEach(b => viewerPanel.classList.remove(`bg-${b}`));
-  document.documentElement.classList.remove('transparent-mode');
-  if (bg === 'transparent') {
-    document.documentElement.classList.add('transparent-mode');
-  } else if (bg !== 'dark') {
-    viewerPanel.classList.add(`bg-${bg}`);
-  }
-  document.querySelectorAll('.bg-preset-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.bg === bg);
-  });
-  bgPickerBtn.classList.toggle('active', bg !== 'dark');
-  localStorage.setItem('bg_preset', bg);
-}
-
-bgPickerBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  bgPickerPanel.classList.toggle('hidden');
-});
-
-document.querySelectorAll('.bg-preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    applyBg(btn.dataset.bg);
-    bgPickerPanel.classList.add('hidden');
-  });
-});
-
-document.addEventListener('click', () => bgPickerPanel.classList.add('hidden'));
-bgPickerPanel.addEventListener('click', e => e.stopPropagation());
-
-// 保存済み背景を復元
-applyBg(localStorage.getItem('bg_preset') ?? 'dark');
-
-// ---- クロマキー (OBS緑背景) トグル ----
-const chromaKeyBtn = document.getElementById('chroma-key-btn');
-chromaKeyBtn.addEventListener('click', () => {
-  const isChroma = document.documentElement.classList.toggle('chroma-key-mode');
-  chromaKeyBtn.classList.toggle('active', isChroma);
-  chromaKeyBtn.title = isChroma ? '緑背景を解除' : 'OBSクロマキー用グリーンバック';
-});
+const vrmLoadStatus = document.getElementById('vrm-load-status');
 
 // ---- VRM 読み込み ----
 loadVrmBtn.addEventListener('click', () => vrmFileInput.click());
@@ -87,9 +40,8 @@ async function loadBuiltinVRM() {
     await viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Lilym.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
     setStatus('デフォルトモーション適用中...');
     await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
-    stopVRMABtn.classList.remove('hidden');
-    vrmaPresetSelect.value = '';
-    setStatus('準備完了');
+    vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
+    setStatus('');
   } catch (err) {
     setStatus(`モデル読み込みエラー: ${err.message}`);
     console.error(err);
@@ -101,29 +53,26 @@ async function loadBuiltinVRM() {
 vrmFileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  setStatus('VRMを読み込み中...');
   loadVrmBtn.disabled = true;
+  vrmLoadStatus.textContent = '読み込み中...';
   try {
-    await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
-    setStatus('準備完了');
+    await viewer.loadVRM(file, (pct) => { vrmLoadStatus.textContent = `読み込み中... ${pct}%`; });
+    vrmLoadStatus.textContent = `✅ ${file.name}`;
+    setStatus('');
   } catch (err) {
-    setStatus(`読み込みエラー: ${err.message}`);
+    vrmLoadStatus.textContent = `❌ ${err.message}`;
     console.error(err);
     loadVrmBtn.disabled = false;
     vrmFileInput.value = '';
     return;
   }
-  // デフォルトモーション (失敗してもVRM読み込み自体は成功扱い)
+  // デフォルトモーション
   try {
-    setStatus('デフォルトモーション適用中...');
     const vrmaUrl = import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma';
     await viewer.loadVRMA(vrmaUrl, { loop: true });
-    stopVRMABtn.classList.remove('hidden');
     vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
-    setStatus('準備完了');
   } catch (vrmaErr) {
     console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
-    setStatus('準備完了');
   } finally {
     loadVrmBtn.disabled = false;
     vrmFileInput.value = '';
@@ -144,7 +93,6 @@ vrmaFileInput.addEventListener('change', async (e) => {
   try {
     await viewer.loadVRMA(file);
     setStatus('アニメーション再生中');
-    stopVRMABtn.classList.remove('hidden');
   } catch (err) {
     setStatus(`VRMAエラー: ${err.message}`);
     console.error(err);
@@ -154,25 +102,18 @@ vrmaFileInput.addEventListener('change', async (e) => {
   }
 });
 
-stopVRMABtn.addEventListener('click', () => {
-  viewer.stopVRMA();
-  stopVRMABtn.classList.add('hidden');
-  vrmaPresetSelect.value = '';
-  setStatus('準備完了');
-});
-
 // ---- VRMAプリセット選択 ----
 vrmaPresetSelect.addEventListener('change', async () => {
   const path = vrmaPresetSelect.value;
-  if (!path) return;
+  const prevValue = vrmaPresetSelect.dataset.current ?? 'vrma/VRMA_03.vrma';
   setStatus('モーション読み込み中...');
   try {
     await viewer.loadVRMA(import.meta.env.BASE_URL + path);
+    vrmaPresetSelect.dataset.current = path;
     setStatus('アニメーション再生中');
-    stopVRMABtn.classList.remove('hidden');
   } catch (err) {
     setStatus(`VRMAエラー: ${err.message}`);
-    vrmaPresetSelect.value = '';
+    vrmaPresetSelect.value = prevValue;
     console.error(err);
   }
 });
@@ -195,9 +136,9 @@ async function sendMessage(text) {
   chatInput.value = '';
   autoResizeTextarea();
 
-  appendMessage('user', text);
+  appendMessage('user', text, true);  // 送信時は強制スクロール
 
-  const assistantEl = appendMessage('assistant', '');
+  const assistantEl = appendMessage('assistant', '', true);
   const textNode = assistantEl.querySelector('.message-text');
 
   setStatus('考え中...');
@@ -221,7 +162,7 @@ async function sendMessage(text) {
     lipSync.stop();
     viewer.stopTalking();
     viewer.resetExpressions();
-    setStatus('準備完了');
+    setStatus('');
   };
 
   let fullResponse = '';
@@ -240,7 +181,7 @@ async function sendMessage(text) {
     const spokenText = fullResponse.trim();
     if (!spokenText) {
       textNode.textContent = '(応答がありませんでした)';
-      setStatus('準備完了');
+      setStatus('');
       return;
     }
     textNode.textContent = spokenText;
@@ -258,18 +199,12 @@ async function sendMessage(text) {
   } finally {
     if (_activePipeline === pipeline) _activePipeline = null;
     setInputEnabled(true);
-    chatInput.focus();
+    // タッチデバイスではフォーカスするとキーボードが再出現するので抑制
+    if (!navigator.maxTouchPoints) chatInput.focus();
   }
 }
 
 sendBtn.addEventListener('click', () => sendMessage(chatInput.value));
-
-// ---- ジェスチャーボタン ----
-document.querySelectorAll('.gesture-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    viewer.playGesture(btn.dataset.gesture);
-  });
-});
 
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -290,7 +225,7 @@ micBtn.addEventListener('click', () => {
   if (speech.isListening) {
     speech.stopListening();
     micBtn.classList.remove('active');
-    setStatus('準備完了');
+    setStatus('');
     return;
   }
 
@@ -380,8 +315,18 @@ clearHistoryBtn.addEventListener('click', () => {
 // ---- ウィンドウリサイズ ----
 window.addEventListener('resize', () => viewer.resize());
 
+// ---- モバイル: キーボード表示検知 (visualViewport API) ----
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    // キーボードが出るとvisualViewportの高さが縮む
+    const keyboardOpen = window.visualViewport.height < window.innerHeight - 100;
+    document.documentElement.classList.toggle('keyboard-open', keyboardOpen);
+    if (!keyboardOpen) viewer.resize();
+  });
+}
+
 // ---- ユーティリティ ----
-function appendMessage(role, text) {
+function appendMessage(role, text, force = false) {
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
   wrap.innerHTML = `
@@ -391,7 +336,7 @@ function appendMessage(role, text) {
     </div>
   `;
   chatMessages.appendChild(wrap);
-  scrollToBottom();
+  scrollToBottom(force);
   return wrap;
 }
 
@@ -402,8 +347,18 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
-function scrollToBottom() {
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+// ユーザーが意図的に上スクロールしているか判定するしきい値 (px)
+const SCROLL_THRESHOLD = 80;
+
+function isNearBottom() {
+  const el = chatMessages;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_THRESHOLD;
+}
+
+function scrollToBottom(force = false) {
+  if (force || isNearBottom()) {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
 }
 
 function setStatus(text) {

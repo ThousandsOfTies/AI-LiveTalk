@@ -32,10 +32,6 @@ export class VRMViewer {
     // 話し中フラグ
     this._isTalking = false;
 
-    // ジェスチャー
-    this._gesture = null;         // { name, progress, duration }
-    this._gestureTimer = 0;
-
     // VRMAアニメーション
     this._mixer = null;
     this._vrmaAction = null;
@@ -316,16 +312,6 @@ export class VRMViewer {
   /** 返答終了時に呼ぶ */
   stopTalking() { this._isTalking = false; }
 
-  // ---- ジェスチャー API ----
-
-  /**
-   * @param {'nod'|'shake'|'wave'|'surprised'} name
-   */
-  playGesture(name) {
-    const durations = { nod: 1.0, shake: 1.2, wave: 2.0, surprised: 0.9, droop: 2.0, stretch: 2.5 };
-    this._gesture = { name, progress: 0, duration: durations[name] ?? 1.0 };
-  }
-
   // ---- アイドル・トーキングモーション ----
 
   _updateIdleMotion(t) {
@@ -351,7 +337,7 @@ export class VRMViewer {
 
     // --- 頭 ---
     const headNode = h.getNormalizedBoneNode('head');
-    if (headNode && !this._gesture) {
+    if (headNode) {
       headNode.rotation.y = Math.sin(t * 0.25) * headYAmp;
       headNode.rotation.x = Math.sin(t * 0.18) * headXAmp;
     }
@@ -370,58 +356,6 @@ export class VRMViewer {
     _rot(h, 'rightLowerArm', { z: -0.1 - Math.sin(t * 0.6 + 0.2) * 0.03 });
   }
 
-  _updateGesture(delta) {
-    if (!this._gesture || !this.vrm?.humanoid) return;
-    const g = this._gesture;
-    g.progress += delta / g.duration;
-    const p = Math.min(g.progress, 1);
-    const h = this.vrm.humanoid;
-
-    if (g.name === 'nod') {
-      const v = Math.sin(p * Math.PI * 3) * 0.18;
-      _rot(h, 'head', { x: v });
-      _rot(h, 'neck', { x: v * 0.5 });
-    } else if (g.name === 'shake') {
-      const v = Math.sin(p * Math.PI * 4) * 0.2;
-      _rot(h, 'head', { y: v });
-      _rot(h, 'neck', { y: v * 0.4 });
-    } else if (g.name === 'wave') {
-      // 右腕を振る
-      const angle = -0.8 + Math.sin(p * Math.PI * 4) * 0.6;
-      _rot(h, 'rightUpperArm', { z: angle, x: -0.3 });
-      _rot(h, 'rightLowerArm', { z: -0.5 + Math.sin(p * Math.PI * 4) * 0.3 });
-    } else if (g.name === 'surprised') {
-      // 頭を引いて両腕を広げる（モデルに表情がない分を動きで補う）
-      const v = Math.max(0, Math.sin(p * Math.PI));
-      _rot(h, 'head', { x: -v * 0.22 });
-      _rot(h, 'neck', { x: -v * 0.1 });
-      _rot(h, 'leftUpperArm',  { z:  1.2 - v * 0.5, x: -v * 0.15 });
-      _rot(h, 'rightUpperArm', { z: -1.2 + v * 0.5, x: -v * 0.15 });
-      this.vrm.expressionManager?.setValue('surprised', v * 0.8);
-    } else if (g.name === 'droop') {
-      // 悲しみ: 頭をゆっくり垂れて肩を落とす
-      const fadeIn  = Math.min(p / 0.4, 1);
-      const fadeOut = Math.max(0, 1 - (p - 0.7) / 0.3);
-      const v = fadeIn * (p < 0.7 ? 1 : fadeOut);
-      _rot(h, 'head',  { x: v * 0.28 });
-      _rot(h, 'neck',  { x: v * 0.12 });
-      _rot(h, 'chest', { x: v * 0.06 });
-      _rot(h, 'leftUpperArm',  { z: 1.2 + v * 0.18 });
-      _rot(h, 'rightUpperArm', { z: -1.2 - v * 0.18 });
-    } else if (g.name === 'stretch') {
-      // リラックス: 両腕をゆっくり広げて戻す
-      const v = Math.sin(p * Math.PI);
-      _rot(h, 'leftUpperArm',  { z: 1.2 - v * 0.5, x: -v * 0.1 });
-      _rot(h, 'rightUpperArm', { z: -1.2 + v * 0.5, x: -v * 0.1 });
-      _rot(h, 'head', { x: -v * 0.06 });
-    }
-
-    if (p >= 1) {
-      this._gesture = null;
-      this.vrm.expressionManager?.setValue('surprised', 0);
-    }
-  }
-
   // ---- アニメーションループ (更新) ----
 
   _animate() {
@@ -431,10 +365,7 @@ export class VRMViewer {
 
     if (this.vrm) {
       this._updateBlinking(delta);
-      if (!this._vrmaPlaying) {
-        this._updateIdleMotion(elapsed);
-        this._updateGesture(delta);
-      }
+      if (!this._vrmaPlaying) this._updateIdleMotion(elapsed);
       if (this._mixer) this._mixer.update(delta);
       this.vrm.update(delta);
     }

@@ -71,16 +71,6 @@ export class AivisSpeechClient {
   }
 
   /**
-   * 話者一覧を取得する
-   * @returns {Promise<Array<{name:string, speaker_uuid:string, styles:Array<{id:number,name:string}>}>>}
-   */
-  async getSpeakers() {
-    const res = await fetch(`${this.baseUrl}/speakers`);
-    if (!res.ok) throw new Error(`speakers API エラー: ${res.status}`);
-    return res.json();
-  }
-
-  /**
    * テキストを音声合成して AudioBuffer を返す
    * @param {string} text
    * @returns {Promise<AudioBuffer>}
