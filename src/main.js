@@ -133,6 +133,10 @@ async function sendMessage(text) {
   text = text.trim();
   if (!text) return;
 
+  // iOS Safari などの自動再生ブロック（無音になり、onended が発火せず口がバグる問題）を回避するため、
+  // ユーザーがボタンを押した直後のタイミングで AudioContext を解禁（resume）しておく
+  await speech.unlockAudio();
+
   chatInput.value = '';
   autoResizeTextarea();
 

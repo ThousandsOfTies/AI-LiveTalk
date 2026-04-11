@@ -232,6 +232,15 @@ export class SpeechManager {
     });
   }
 
+  /**
+   * ブラウザのユーザーゲスチャー（クリック等）の瞬間にAudioContextを生成/再開し、
+   * iOS Safari 等での再生ブロック（無音状態のまま onended が来ないバグ）を回避する
+   */
+  async unlockAudio() {
+    if (this._useCloud) await this._cloud._getAudioCtx();
+    else if (this._useAivis) await this._aivis._getAudioCtx();
+  }
+
   stopSpeaking() {
     this._aivis.stop();
     window.speechSynthesis.cancel();
