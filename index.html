@@ -59,6 +59,32 @@
           <span id="vrm-load-status" class="hint"></span>
         </label>
 
+        <!-- Google Drive 同期 -->
+        <div class="drive-section">
+          <div class="drive-section-title">☁ Google Drive 同期</div>
+          <div id="drive-ui-out">
+            <button type="button" id="drive-signin-btn">Googleでサインイン</button>
+          </div>
+          <div id="drive-ui-in" class="hidden">
+            <div class="drive-row">
+              <button type="button" id="drive-save-btn">↑ 設定を保存</button>
+              <button type="button" id="drive-load-btn">↓ 設定を読み込み</button>
+            </div>
+            <div class="drive-vrm-label">VRMモデル (Drive)</div>
+            <div class="drive-row">
+              <button type="button" id="drive-upload-vrm-btn">↑ VRMをアップロード</button>
+              <button type="button" id="drive-list-vrm-btn">↓ 一覧を取得</button>
+            </div>
+            <select id="drive-vrm-select" class="hidden">
+              <option value="">-- モデルを選択 --</option>
+            </select>
+            <button type="button" id="drive-apply-vrm-btn" class="hidden">このモデルを読み込む</button>
+            <span id="drive-status" class="hint"></span>
+            <button type="button" id="drive-signout-btn" class="drive-signout">サインアウト</button>
+          </div>
+        </div>
+        <input type="file" id="drive-vrm-upload-input" accept=".vrm" hidden>
+
         <label>
           APIエンドポイント
           <span class="hint">OpenAI互換ならOllama (http://localhost:11434/v1) も可</span>
