@@ -281,6 +281,11 @@ let _longPressTriggered = false;
 
 micBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // 長押しコンテキストメニューを抑制
 
+// iOS Safari の絵文字長押し（文字情報・コールアウト）を抑制し pointercancel を防ぐ
+micBtn.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+}, { passive: false });
+
 micBtn.addEventListener('pointerdown', () => {
   if (micBtn.disabled) return;
   _longPressTriggered = false;
