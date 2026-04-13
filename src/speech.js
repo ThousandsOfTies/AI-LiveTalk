@@ -20,22 +20,15 @@ export class SpeechManager {
     this.onSpeechEnd = null;
 
     // Aivis Cloud API クライアント（最優先）
-    // localStorageに設定済みなら優先、なければ環境変数（ビルド時埋め込み）を使用
-    const cloudApiKey    = localStorage.getItem('aivis_cloud_api_key')
-                        || import.meta.env.VITE_AIVIS_CLOUD_API_KEY
-                        || '';
-    const cloudModelUuid = localStorage.getItem('aivis_cloud_model_uuid')
-                        || import.meta.env.VITE_AIVIS_CLOUD_MODEL_UUID
-                        || '';
+    // 環境変数（ビルド時埋め込み）を初期値とし、applySettings() で上書きされる
+    const cloudApiKey    = import.meta.env.VITE_AIVIS_CLOUD_API_KEY    || '';
+    const cloudModelUuid = import.meta.env.VITE_AIVIS_CLOUD_MODEL_UUID || '';
     this._cloud = new AivisCloudClient(cloudApiKey, cloudModelUuid);
     this._useCloud = this._cloud.isAvailable();
     if (this._useCloud) console.log('[TTS] Aivis Cloud API を使用します');
 
     // ローカル AivisSpeech クライアント
-    this._aivis = new AivisSpeechClient(
-      localStorage.getItem('aivis_url') || 'http://localhost:10101',
-      Number(localStorage.getItem('aivis_speaker_id') || 888753760)
-    );
+    this._aivis = new AivisSpeechClient('http://localhost:10101', 888753760);
     this._useAivis = false; // isAvailable() で確認後に true になる
     if (!this._useCloud) this._checkAivis();
 
@@ -80,6 +73,32 @@ export class SpeechManager {
     this._aivis.baseUrl = url.replace(/\/$/, '');
     this._aivis.speakerId = Number(speakerId);
     this._checkAivis();
+  }
+
+  /** 設定を一括適用する */
+  applySettings(s) {
+    if (s.aivis_url || s.aivis_speaker_id) {
+      this.updateAivisSettings(
+        s.aivis_url        || this._aivis.baseUrl,
+        s.aivis_speaker_id || this._aivis.speakerId
+      );
+    }
+    if (s.aivis_cloud_api_key || s.aivis_cloud_model_uuid) {
+      this.updateCloudSettings(
+        s.aivis_cloud_api_key    || this._cloud.apiKey,
+        s.aivis_cloud_model_uuid || this._cloud.modelUuid
+      );
+    }
+  }
+
+  /** 現在の設定をオブジェクトとして返す */
+  getSettings() {
+    return {
+      aivis_url:              this._aivis.baseUrl,
+      aivis_speaker_id:       String(this._aivis.speakerId),
+      aivis_cloud_api_key:    this._cloud.apiKey,
+      aivis_cloud_model_uuid: this._cloud.modelUuid,
+    };
   }
 
   _initRecognition() {

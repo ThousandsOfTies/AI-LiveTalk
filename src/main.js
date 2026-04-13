@@ -4,6 +4,9 @@ import { LLMClient } from './llm-client.js';
 import { SpeechManager } from './speech.js';
 import { LipSync } from './lip-sync.js';
 import { TTSPipeline } from './tts-pipeline.js';
+import { GoogleDriveSync } from './google-drive-sync.js';
+import { LocalStorage } from './local-storage.js';
+import { AppStorage } from './app-storage.js';
 
 // ---- インスタンス生成 ----
 const canvas = document.getElementById('vrm-canvas');
@@ -11,6 +14,9 @@ const viewer = new VRMViewer(canvas);
 const llm = new LLMClient();
 const speech = new SpeechManager();
 const lipSync = new LipSync(viewer);
+const driveSync = new GoogleDriveSync();
+const local   = new LocalStorage();
+const storage = new AppStorage(driveSync, local);
 
 // ---- DOM 参照 ----
 const loadVrmBtn = document.getElementById('load-vrm-btn');
@@ -192,6 +198,7 @@ async function sendMessage(text) {
 
     // LLM完了 → パイプラインの残りを流して全再生完了まで待つ
     await pipeline.done({ lang: llm.ttsLang });
+    scheduleHistorySave();
 
   } catch (err) {
     textNode.textContent = `エラー: ${err.message}`;
@@ -341,39 +348,40 @@ settingsBtn.addEventListener('click', () => {
     document.getElementById('setting-model').value = llm.model;
     document.getElementById('setting-system-prompt').value = llm.systemPrompt;
     document.getElementById('setting-tts-lang').value = llm.ttsLang;
-    document.getElementById('setting-aivis-url').value =
-      localStorage.getItem('aivis_url') || 'http://localhost:10101';
-    document.getElementById('setting-aivis-speaker').value =
-      localStorage.getItem('aivis_speaker_id') || '888753760';
-    document.getElementById('setting-cloud-api-key').value =
-      localStorage.getItem('aivis_cloud_api_key') || '';
-    document.getElementById('setting-cloud-model-uuid').value =
-      localStorage.getItem('aivis_cloud_model_uuid') || '';
+    const speechSettings = speech.getSettings();
+    document.getElementById('setting-aivis-url').value         = speechSettings.aivis_url              || 'http://localhost:10101';
+    document.getElementById('setting-aivis-speaker').value     = speechSettings.aivis_speaker_id        || '888753760';
+    document.getElementById('setting-cloud-api-key').value     = speechSettings.aivis_cloud_api_key    || '';
+    document.getElementById('setting-cloud-model-uuid').value  = speechSettings.aivis_cloud_model_uuid || '';
     const ttsMode = speech._useCloud ? '✅ Cloud API 使用中' :
                    speech._useAivis ? '✅ ローカル AivisSpeech 使用中' : '❌ ブラウザTTS使用中';
     document.getElementById('aivis-status').textContent = ttsMode;
+
+    // Drive サインイン済みなら自動保存チェックと、プリセットを更新
+    if (driveSync.isSignedIn) {
+      document.getElementById('drive-autosave-chk').checked = _autoSaveEnabled;
+      if (Date.now() - _presetsLastRefresh > 60_000) refreshPresets();
+    }
   }
 });
 
 saveSettingsBtn.addEventListener('click', () => {
-  llm.endpoint = document.getElementById('setting-endpoint').value.trim();
-  llm.apiKey = document.getElementById('setting-api-key').value.trim();
-  llm.model = document.getElementById('setting-model').value.trim();
+  llm.endpoint     = document.getElementById('setting-endpoint').value.trim();
+  llm.apiKey       = document.getElementById('setting-api-key').value.trim();
+  llm.model        = document.getElementById('setting-model').value.trim();
   llm.systemPrompt = document.getElementById('setting-system-prompt').value.trim();
-  llm.ttsLang = document.getElementById('setting-tts-lang').value;
-  llm.save();
+  llm.ttsLang      = document.getElementById('setting-tts-lang').value;
 
-  const aivisUrl = document.getElementById('setting-aivis-url').value.trim();
-  const aivisSpeaker = document.getElementById('setting-aivis-speaker').value.trim();
-  localStorage.setItem('aivis_url', aivisUrl);
-  localStorage.setItem('aivis_speaker_id', aivisSpeaker);
-  speech.updateAivisSettings(aivisUrl, aivisSpeaker);
+  speech.updateAivisSettings(
+    document.getElementById('setting-aivis-url').value.trim(),
+    document.getElementById('setting-aivis-speaker').value.trim()
+  );
+  speech.updateCloudSettings(
+    document.getElementById('setting-cloud-api-key').value.trim(),
+    document.getElementById('setting-cloud-model-uuid').value.trim()
+  );
 
-  const cloudApiKey    = document.getElementById('setting-cloud-api-key').value.trim();
-  const cloudModelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
-  localStorage.setItem('aivis_cloud_api_key', cloudApiKey);
-  localStorage.setItem('aivis_cloud_model_uuid', cloudModelUuid);
-  speech.updateCloudSettings(cloudApiKey, cloudModelUuid);
+  storage.saveSettings(collectSettings()).catch(err => console.warn('設定保存失敗:', err.message));
 
   settingsPanel.classList.add('hidden');
   setStatus('設定を保存しました');
@@ -400,9 +408,417 @@ cancelSettingsBtn.addEventListener('click', () => {
 clearHistoryBtn.addEventListener('click', () => {
   llm.clearHistory();
   chatMessages.innerHTML = '';
+  clearTimeout(_autoSaveTimer); // 保存待ちタイマーもリセット
   setStatus('会話履歴をクリアしました');
   settingsPanel.classList.add('hidden');
 });
+
+// ---- Google Drive 同期 ----
+
+// 自動保存の状態（initApp で設定から復元）
+let _autoSaveEnabled = false;
+let _autoSaveTimer   = null;
+
+// ---- 設定ヘルパー ----
+
+function collectSettings() {
+  return {
+    ...llm.getSettings(),
+    ...speech.getSettings(),
+    autosave_history: String(_autoSaveEnabled),
+  };
+}
+
+function applySettings(s) {
+  if (!s) return;
+  llm.applySettings(s);
+  speech.applySettings(s);
+  if (s.autosave_history !== undefined) _autoSaveEnabled = s.autosave_history === 'true';
+}
+
+function scheduleHistorySave() {
+  if (!_autoSaveEnabled) return;
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(async () => {
+    try {
+      await storage.saveHistory(llm.history);
+      setStatus('履歴を自動保存しました');
+      setTimeout(() => { if (statusEl.textContent === '履歴を自動保存しました') setStatus(''); }, 3000);
+    } catch (err) {
+      console.warn('履歴自動保存失敗:', err.message);
+    }
+  }, 15_000); // 最後の返答から15秒後に保存
+}
+
+// プリセットのキャッシュ
+let _cachedPresets     = [];
+let _presetsLastRefresh = 0;
+
+async function refreshPresets() {
+  try {
+    _cachedPresets      = await storage.loadPresets();
+    _presetsLastRefresh = Date.now();
+    updatePresetSelect();
+  } catch (err) {
+    console.warn('プリセット読み込み失敗:', err.message);
+  }
+}
+
+function updatePresetSelect() {
+  const sel = document.getElementById('drive-preset-select');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- プリセットを選択 --</option>';
+  for (const p of _cachedPresets) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  }
+  if (current) sel.value = current;
+}
+
+const driveAutosaveChk       = document.getElementById('drive-autosave-chk');
+const driveSaveHistoryBtn    = document.getElementById('drive-save-history-btn');
+const driveLoadHistoryBtn    = document.getElementById('drive-load-history-btn');
+const drivePresetSelect      = document.getElementById('drive-preset-select');
+const drivePresetApplyBtn    = document.getElementById('drive-preset-apply-btn');
+const drivePresetDeleteBtn   = document.getElementById('drive-preset-delete-btn');
+const drivePresetNameInput   = document.getElementById('drive-preset-name-input');
+const drivePresetSaveBtn     = document.getElementById('drive-preset-save-btn');
+const driveSigninBtn     = document.getElementById('drive-signin-btn');
+const driveUiOut         = document.getElementById('drive-ui-out');
+const driveUiIn          = document.getElementById('drive-ui-in');
+const driveSaveBtn       = document.getElementById('drive-save-btn');
+const driveLoadBtn       = document.getElementById('drive-load-btn');
+const driveUploadVrmBtn  = document.getElementById('drive-upload-vrm-btn');
+const driveListVrmBtn    = document.getElementById('drive-list-vrm-btn');
+const driveVrmSelect     = document.getElementById('drive-vrm-select');
+const driveApplyVrmBtn   = document.getElementById('drive-apply-vrm-btn');
+const driveSignoutBtn    = document.getElementById('drive-signout-btn');
+const driveStatus        = document.getElementById('drive-status');
+const driveVrmUploadInput = document.getElementById('drive-vrm-upload-input');
+
+function updateDriveSyncUI(isSignedIn) {
+  driveUiOut.classList.toggle('hidden', isSignedIn);
+  driveUiIn.classList.toggle('hidden', !isSignedIn);
+  if (!isSignedIn) {
+    driveVrmSelect.classList.add('hidden');
+    driveApplyVrmBtn.classList.add('hidden');
+    driveStatus.textContent = '';
+  }
+}
+
+driveSync.onSignInChange = (isSignedIn) => {
+  updateDriveSyncUI(isSignedIn);
+  if (isSignedIn) {
+    // Drive から設定・プリセットを再読み込みして適用
+    storage.loadSettings().then(s => {
+      applySettings(s);
+      driveAutosaveChk.checked = _autoSaveEnabled;
+    }).catch(() => {});
+    refreshPresets();
+  }
+};
+
+driveSigninBtn.addEventListener('click', () => {
+  try {
+    driveSync.signIn();
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+  }
+});
+
+driveSignoutBtn.addEventListener('click', () => {
+  driveSync.signOut();
+  _cachedPresets = [];
+  driveStatus.textContent = 'サインアウトしました';
+});
+
+// ---- 会話履歴 ----
+
+driveAutosaveChk.addEventListener('change', () => {
+  _autoSaveEnabled = driveAutosaveChk.checked;
+  storage.saveSettings(collectSettings()).catch(() => {});
+  if (!_autoSaveEnabled) clearTimeout(_autoSaveTimer);
+});
+
+driveSaveHistoryBtn.addEventListener('click', async () => {
+  driveStatus.textContent = '保存中...';
+  driveSaveHistoryBtn.disabled = true;
+  try {
+    await storage.saveHistory(llm.history);
+    driveStatus.textContent = `✅ 履歴を保存しました (${llm.history.length} 件)`;
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveSaveHistoryBtn.disabled = false;
+  }
+});
+
+driveLoadHistoryBtn.addEventListener('click', async () => {
+  driveStatus.textContent = '読み込み中...';
+  driveLoadHistoryBtn.disabled = true;
+  try {
+    const data = await storage.loadHistory();
+    if (!data?.messages?.length) {
+      driveStatus.textContent = 'Drive に保存された履歴がありません';
+      return;
+    }
+    // 現在の履歴を置き換えて表示を再構築
+    llm.history = data.messages;
+    chatMessages.innerHTML = '';
+    for (const msg of data.messages) {
+      appendMessage(msg.role, msg.content);
+    }
+    const date = new Date(data.savedAt).toLocaleString('ja-JP');
+    driveStatus.textContent = `✅ 履歴を読み込みました (${data.messages.length} 件 / ${date})`;
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveLoadHistoryBtn.disabled = false;
+  }
+});
+
+// ---- キャラクタープリセット ----
+
+drivePresetApplyBtn.addEventListener('click', () => {
+  const id = drivePresetSelect.value;
+  if (!id) { driveStatus.textContent = 'プリセットを選択してください'; return; }
+  const preset = _cachedPresets.find(p => p.id === id);
+  if (!preset) return;
+
+  llm.systemPrompt = preset.system_prompt;
+  llm.model        = preset.model;
+  llm.ttsLang      = preset.tts_lang;
+  speech.updateAivisSettings(speech._aivis.baseUrl, preset.aivis_speaker_id || '');
+  speech.updateCloudSettings(speech._cloud.apiKey, preset.aivis_cloud_model_uuid || '');
+
+  // フォームに反映
+  document.getElementById('setting-model').value             = llm.model;
+  document.getElementById('setting-system-prompt').value     = llm.systemPrompt;
+  document.getElementById('setting-tts-lang').value          = llm.ttsLang;
+  document.getElementById('setting-aivis-speaker').value     = preset.aivis_speaker_id || '';
+  document.getElementById('setting-cloud-model-uuid').value  = preset.aivis_cloud_model_uuid || '';
+
+  driveStatus.textContent = `✅ 「${preset.name}」を適用しました`;
+});
+
+drivePresetSaveBtn.addEventListener('click', async () => {
+  const name = drivePresetNameInput.value.trim();
+  if (!name) { driveStatus.textContent = 'プリセット名を入力してください'; return; }
+
+  const newPreset = {
+    id:                    `preset_${Date.now()}`,
+    name,
+    system_prompt:         document.getElementById('setting-system-prompt').value.trim() || llm.systemPrompt,
+    model:                 document.getElementById('setting-model').value.trim()         || llm.model,
+    tts_lang:              document.getElementById('setting-tts-lang').value             || llm.ttsLang,
+    aivis_speaker_id:      document.getElementById('setting-aivis-speaker').value.trim(),
+    aivis_cloud_model_uuid: document.getElementById('setting-cloud-model-uuid').value.trim(),
+  };
+
+  driveStatus.textContent = '保存中...';
+  drivePresetSaveBtn.disabled = true;
+  try {
+    _cachedPresets.push(newPreset);
+    await storage.savePresets(_cachedPresets);
+    updatePresetSelect();
+    drivePresetNameInput.value = '';
+    driveStatus.textContent = `✅ 「${name}」を保存しました`;
+  } catch (err) {
+    _cachedPresets.pop(); // ロールバック
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    drivePresetSaveBtn.disabled = false;
+  }
+});
+
+drivePresetDeleteBtn.addEventListener('click', async () => {
+  const id = drivePresetSelect.value;
+  if (!id) { driveStatus.textContent = 'プリセットを選択してください'; return; }
+  const preset = _cachedPresets.find(p => p.id === id);
+  if (!preset) return;
+
+  driveStatus.textContent = '削除中...';
+  drivePresetDeleteBtn.disabled = true;
+  const prev = [..._cachedPresets];
+  try {
+    _cachedPresets = _cachedPresets.filter(p => p.id !== id);
+    await storage.savePresets(_cachedPresets);
+    updatePresetSelect();
+    driveStatus.textContent = `✅ 「${preset.name}」を削除しました`;
+  } catch (err) {
+    _cachedPresets = prev; // ロールバック
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    drivePresetDeleteBtn.disabled = false;
+  }
+});
+
+driveSaveBtn.addEventListener('click', async () => {
+  driveStatus.textContent = '保存中...';
+  driveSaveBtn.disabled = true;
+  try {
+    await storage.saveSettings(collectSettings());
+    driveStatus.textContent = '✅ 設定を保存しました';
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveSaveBtn.disabled = false;
+  }
+});
+
+driveLoadBtn.addEventListener('click', async () => {
+  driveStatus.textContent = '読み込み中...';
+  driveLoadBtn.disabled = true;
+  try {
+    const settings = await storage.loadSettings();
+    if (!settings) {
+      driveStatus.textContent = '保存された設定が見つかりませんでした';
+      return;
+    }
+    applySettings(settings);
+    // 設定フォームに反映 (パネルが開いている場合)
+    document.getElementById('setting-endpoint').value          = llm.endpoint;
+    document.getElementById('setting-api-key').value           = llm.apiKey;
+    document.getElementById('setting-model').value             = llm.model;
+    document.getElementById('setting-system-prompt').value     = llm.systemPrompt;
+    document.getElementById('setting-tts-lang').value          = llm.ttsLang;
+    const ss = speech.getSettings();
+    document.getElementById('setting-aivis-url').value         = ss.aivis_url              || '';
+    document.getElementById('setting-aivis-speaker').value     = ss.aivis_speaker_id        || '';
+    document.getElementById('setting-cloud-api-key').value     = ss.aivis_cloud_api_key    || '';
+    document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
+    driveStatus.textContent = '✅ 設定を読み込みました';
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveLoadBtn.disabled = false;
+  }
+});
+
+// VRM アップロード
+driveUploadVrmBtn.addEventListener('click', () => driveVrmUploadInput.click());
+
+driveVrmUploadInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  driveStatus.textContent = `アップロード中: ${file.name} ...`;
+  driveUploadVrmBtn.disabled = true;
+  try {
+    await storage.uploadVRM(file, (pct) => {
+      driveStatus.textContent = `アップロード中: ${file.name} ${pct}%`;
+    });
+    driveStatus.textContent = `✅ ${file.name} をアップロードしました`;
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveUploadVrmBtn.disabled = false;
+    driveVrmUploadInput.value = '';
+  }
+});
+
+// VRM 一覧取得
+driveListVrmBtn.addEventListener('click', async () => {
+  driveStatus.textContent = '一覧取得中...';
+  driveVrmSelect.classList.add('hidden');
+  driveApplyVrmBtn.classList.add('hidden');
+  driveListVrmBtn.disabled = true;
+  try {
+    const files = await storage.listVRMFiles();
+    if (files.length === 0) {
+      driveStatus.textContent = 'Drive に VRM ファイルがありません';
+      return;
+    }
+    driveVrmSelect.innerHTML = '<option value="">-- モデルを選択 --</option>';
+    for (const f of files) {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.name;
+      driveVrmSelect.appendChild(opt);
+    }
+    driveVrmSelect.classList.remove('hidden');
+    driveApplyVrmBtn.classList.remove('hidden');
+    driveStatus.textContent = `${files.length} 件のモデルが見つかりました`;
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    console.error(err);
+  } finally {
+    driveListVrmBtn.disabled = false;
+  }
+});
+
+// VRM 読み込み
+driveApplyVrmBtn.addEventListener('click', async () => {
+  const fileId   = driveVrmSelect.value;
+  const fileName = driveVrmSelect.options[driveVrmSelect.selectedIndex]?.text ?? 'model.vrm';
+  if (!fileId) return;
+
+  driveStatus.textContent = `ダウンロード中: ${fileName} ...`;
+  driveApplyVrmBtn.disabled = true;
+  try {
+    const arrayBuffer = await storage.downloadVRM(fileId);
+    const file = new File([arrayBuffer], fileName, { type: 'application/octet-stream' });
+
+    settingsPanel.classList.add('hidden');
+    setStatus(`Drive から ${fileName} を読み込み中...`);
+    loadVrmBtn.disabled = true;
+    vrmLoadStatus.textContent = '読み込み中...';
+
+    await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
+    vrmLoadStatus.textContent = `✅ ${fileName} (Drive)`;
+    setStatus('');
+
+    try {
+      await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
+      vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
+    } catch (vrmaErr) {
+      console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
+    }
+  } catch (err) {
+    driveStatus.textContent = `❌ ${err.message}`;
+    setStatus('VRM読み込みエラー');
+    console.error(err);
+    settingsPanel.classList.remove('hidden');
+  } finally {
+    driveApplyVrmBtn.disabled = false;
+    loadVrmBtn.disabled = false;
+  }
+});
+
+// ---- アプリ初期化 ----
+
+async function initApp() {
+  // IndexedDB を開く
+  await local.init();
+
+  // Google Drive セッション復元（完了後に onSignInChange が発火する場合がある）
+  await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+
+  // サインイン状態に応じたバックエンドから設定を読み込む
+  const saved = await storage.loadSettings().catch(() => null);
+  applySettings(saved);
+
+  // プリセットを読み込む
+  refreshPresets();
+}
+
+initApp().catch(err => console.warn('App init error:', err));
+
+// ---- PWA: Service Worker 登録 ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
+      .catch(err => console.warn('SW 登録失敗:', err));
+  });
+}
 
 // ---- ウィンドウリサイズ ----
 window.addEventListener('resize', () => viewer.resize());
