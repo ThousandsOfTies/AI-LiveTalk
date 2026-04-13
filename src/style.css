@@ -438,15 +438,35 @@ body {
   gap: 8px;
 }
 
-.sync-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: #7a90ff;
-  background: #0e1830;
-  border: 1px solid #2a4060;
-  padding: 4px 10px;
-  border-radius: 20px;
-  white-space: nowrap;
+.sync-avatar-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.sync-avatar-btn:hover { opacity: 0.8; }
+
+.sync-avatar-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: none;
+}
+.sync-avatar-img.loaded { display: block; }
+
+.sync-avatar-fallback {
+  font-size: 18px;
+  line-height: 1;
 }
 
 /* ---- 設定タブ ---- */

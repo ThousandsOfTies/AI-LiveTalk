@@ -508,10 +508,25 @@ const driveStatus        = document.getElementById('drive-status');
 const driveVrmUploadInput = document.getElementById('drive-vrm-upload-input');
 
 function updateDriveSyncUI(isSignedIn) {
-  // ヘッダーのサインインボタン ↔ 同期バッジを切り替え
+  // ヘッダーのサインインボタン ↔ アバターを切り替え
   driveSigninBtn.classList.toggle('hidden', isSignedIn);
   driveUiIn.classList.toggle('hidden', !isSignedIn);
-  if (!isSignedIn) {
+
+  if (isSignedIn) {
+    const img = document.getElementById('sync-avatar-img');
+    const pic = driveSync.picture;
+    if (pic) {
+      img.src = pic;
+      img.onload = () => {
+        img.classList.add('loaded');
+        img.nextElementSibling.style.display = 'none'; // fallback を隠す
+      };
+    }
+  } else {
+    const img = document.getElementById('sync-avatar-img');
+    img.src = '';
+    img.classList.remove('loaded');
+    img.nextElementSibling.style.display = '';
     driveVrmSelect.classList.add('hidden');
     driveApplyVrmBtn.classList.add('hidden');
     driveStatus.textContent = '';

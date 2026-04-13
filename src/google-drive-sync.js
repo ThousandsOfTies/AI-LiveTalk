@@ -12,6 +12,7 @@ export class GoogleDriveSync {
     this._tokenClient = null;
     this._tokenExpiry = 0; // Unix ms
     this._email = null;
+    this._picture = null;
     this.onSignInChange = null; // callback(isSignedIn: boolean)
   }
 
@@ -45,9 +46,10 @@ export class GoogleDriveSync {
   _saveSession() {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
-        token: this._token,
-        expiry: this._tokenExpiry,
-        email: this._email,
+        token:   this._token,
+        expiry:  this._tokenExpiry,
+        email:   this._email,
+        picture: this._picture,
       }));
     } catch (_) {}
   }
@@ -64,13 +66,14 @@ export class GoogleDriveSync {
       saved = JSON.parse(raw);
     } catch (_) { return; }
 
-    const { token, expiry, email } = saved;
+    const { token, expiry, email, picture } = saved;
 
     // トークンがまだ有効期限内の場合はそのまま復元
     if (token && expiry && Date.now() < expiry) {
-      this._token = token;
+      this._token       = token;
       this._tokenExpiry = expiry;
-      this._email = email ?? null;
+      this._email       = email   ?? null;
+      this._picture     = picture ?? null;
       this.onSignInChange?.(true);
       return;
     }
@@ -82,6 +85,8 @@ export class GoogleDriveSync {
     }
   }
 
+  get picture() { return this._picture; }
+
   async _fetchAndSaveEmail() {
     try {
       const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -89,7 +94,8 @@ export class GoogleDriveSync {
       });
       if (res.ok) {
         const info = await res.json();
-        this._email = info.email ?? null;
+        this._email   = info.email   ?? null;
+        this._picture = info.picture ?? null;
       }
     } catch (_) {}
     this._saveSession();
@@ -119,9 +125,10 @@ export class GoogleDriveSync {
 
   signOut() {
     if (this._token) google.accounts.oauth2.revoke(this._token, () => {});
-    this._token = null;
+    this._token       = null;
     this._tokenExpiry = 0;
-    this._email = null;
+    this._email       = null;
+    this._picture     = null;
     this._clearSession();
     this.onSignInChange?.(false);
   }
