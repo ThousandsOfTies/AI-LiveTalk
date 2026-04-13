@@ -5,6 +5,8 @@ import { SpeechManager } from './speech.js';
 import { LipSync } from './lip-sync.js';
 import { TTSPipeline } from './tts-pipeline.js';
 import { GoogleDriveSync } from './google-drive-sync.js';
+import { LocalStorage } from './local-storage.js';
+import { AppStorage } from './app-storage.js';
 
 // ---- インスタンス生成 ----
 const canvas = document.getElementById('vrm-canvas');
@@ -13,6 +15,8 @@ const llm = new LLMClient();
 const speech = new SpeechManager();
 const lipSync = new LipSync(viewer);
 const driveSync = new GoogleDriveSync();
+const local   = new LocalStorage();
+const storage = new AppStorage(driveSync, local);
 
 // ---- DOM 参照 ----
 const loadVrmBtn = document.getElementById('load-vrm-btn');
@@ -344,14 +348,11 @@ settingsBtn.addEventListener('click', () => {
     document.getElementById('setting-model').value = llm.model;
     document.getElementById('setting-system-prompt').value = llm.systemPrompt;
     document.getElementById('setting-tts-lang').value = llm.ttsLang;
-    document.getElementById('setting-aivis-url').value =
-      localStorage.getItem('aivis_url') || 'http://localhost:10101';
-    document.getElementById('setting-aivis-speaker').value =
-      localStorage.getItem('aivis_speaker_id') || '888753760';
-    document.getElementById('setting-cloud-api-key').value =
-      localStorage.getItem('aivis_cloud_api_key') || '';
-    document.getElementById('setting-cloud-model-uuid').value =
-      localStorage.getItem('aivis_cloud_model_uuid') || '';
+    const speechSettings = speech.getSettings();
+    document.getElementById('setting-aivis-url').value         = speechSettings.aivis_url              || 'http://localhost:10101';
+    document.getElementById('setting-aivis-speaker').value     = speechSettings.aivis_speaker_id        || '888753760';
+    document.getElementById('setting-cloud-api-key').value     = speechSettings.aivis_cloud_api_key    || '';
+    document.getElementById('setting-cloud-model-uuid').value  = speechSettings.aivis_cloud_model_uuid || '';
     const ttsMode = speech._useCloud ? '✅ Cloud API 使用中' :
                    speech._useAivis ? '✅ ローカル AivisSpeech 使用中' : '❌ ブラウザTTS使用中';
     document.getElementById('aivis-status').textContent = ttsMode;
@@ -365,24 +366,22 @@ settingsBtn.addEventListener('click', () => {
 });
 
 saveSettingsBtn.addEventListener('click', () => {
-  llm.endpoint = document.getElementById('setting-endpoint').value.trim();
-  llm.apiKey = document.getElementById('setting-api-key').value.trim();
-  llm.model = document.getElementById('setting-model').value.trim();
+  llm.endpoint     = document.getElementById('setting-endpoint').value.trim();
+  llm.apiKey       = document.getElementById('setting-api-key').value.trim();
+  llm.model        = document.getElementById('setting-model').value.trim();
   llm.systemPrompt = document.getElementById('setting-system-prompt').value.trim();
-  llm.ttsLang = document.getElementById('setting-tts-lang').value;
-  llm.save();
+  llm.ttsLang      = document.getElementById('setting-tts-lang').value;
 
-  const aivisUrl = document.getElementById('setting-aivis-url').value.trim();
-  const aivisSpeaker = document.getElementById('setting-aivis-speaker').value.trim();
-  localStorage.setItem('aivis_url', aivisUrl);
-  localStorage.setItem('aivis_speaker_id', aivisSpeaker);
-  speech.updateAivisSettings(aivisUrl, aivisSpeaker);
+  speech.updateAivisSettings(
+    document.getElementById('setting-aivis-url').value.trim(),
+    document.getElementById('setting-aivis-speaker').value.trim()
+  );
+  speech.updateCloudSettings(
+    document.getElementById('setting-cloud-api-key').value.trim(),
+    document.getElementById('setting-cloud-model-uuid').value.trim()
+  );
 
-  const cloudApiKey    = document.getElementById('setting-cloud-api-key').value.trim();
-  const cloudModelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
-  localStorage.setItem('aivis_cloud_api_key', cloudApiKey);
-  localStorage.setItem('aivis_cloud_model_uuid', cloudModelUuid);
-  speech.updateCloudSettings(cloudApiKey, cloudModelUuid);
+  storage.saveSettings(collectSettings()).catch(err => console.warn('設定保存失敗:', err.message));
 
   settingsPanel.classList.add('hidden');
   setStatus('設定を保存しました');
@@ -416,16 +415,33 @@ clearHistoryBtn.addEventListener('click', () => {
 
 // ---- Google Drive 同期 ----
 
-// 自動保存の状態
-let _autoSaveEnabled = localStorage.getItem('drive_autosave_history') === 'true';
+// 自動保存の状態（initApp で設定から復元）
+let _autoSaveEnabled = false;
 let _autoSaveTimer   = null;
 
+// ---- 設定ヘルパー ----
+
+function collectSettings() {
+  return {
+    ...llm.getSettings(),
+    ...speech.getSettings(),
+    autosave_history: String(_autoSaveEnabled),
+  };
+}
+
+function applySettings(s) {
+  if (!s) return;
+  llm.applySettings(s);
+  speech.applySettings(s);
+  if (s.autosave_history !== undefined) _autoSaveEnabled = s.autosave_history === 'true';
+}
+
 function scheduleHistorySave() {
-  if (!_autoSaveEnabled || !driveSync.isSignedIn) return;
+  if (!_autoSaveEnabled) return;
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(async () => {
     try {
-      await driveSync.saveHistory(llm.history);
+      await storage.saveHistory(llm.history);
       setStatus('履歴を自動保存しました');
       setTimeout(() => { if (statusEl.textContent === '履歴を自動保存しました') setStatus(''); }, 3000);
     } catch (err) {
@@ -440,7 +456,7 @@ let _presetsLastRefresh = 0;
 
 async function refreshPresets() {
   try {
-    _cachedPresets     = await driveSync.loadPresets();
+    _cachedPresets      = await storage.loadPresets();
     _presetsLastRefresh = Date.now();
     updatePresetSelect();
   } catch (err) {
@@ -460,11 +476,6 @@ function updatePresetSelect() {
   }
   if (current) sel.value = current;
 }
-
-const SYNC_KEYS = [
-  'llm_endpoint', 'llm_api_key', 'llm_model', 'llm_system_prompt', 'llm_tts_lang',
-  'aivis_url', 'aivis_speaker_id', 'aivis_cloud_api_key', 'aivis_cloud_model_uuid',
-];
 
 const driveAutosaveChk       = document.getElementById('drive-autosave-chk');
 const driveSaveHistoryBtn    = document.getElementById('drive-save-history-btn');
@@ -500,11 +511,14 @@ function updateDriveSyncUI(isSignedIn) {
 driveSync.onSignInChange = (isSignedIn) => {
   updateDriveSyncUI(isSignedIn);
   if (isSignedIn) {
-    driveAutosaveChk.checked = _autoSaveEnabled;
+    // Drive から設定・プリセットを再読み込みして適用
+    storage.loadSettings().then(s => {
+      applySettings(s);
+      driveAutosaveChk.checked = _autoSaveEnabled;
+    }).catch(() => {});
     refreshPresets();
   }
 };
-driveSync.init().catch(err => console.warn('Drive sync init:', err));
 
 driveSigninBtn.addEventListener('click', () => {
   try {
@@ -524,7 +538,7 @@ driveSignoutBtn.addEventListener('click', () => {
 
 driveAutosaveChk.addEventListener('change', () => {
   _autoSaveEnabled = driveAutosaveChk.checked;
-  localStorage.setItem('drive_autosave_history', String(_autoSaveEnabled));
+  storage.saveSettings(collectSettings()).catch(() => {});
   if (!_autoSaveEnabled) clearTimeout(_autoSaveTimer);
 });
 
@@ -532,7 +546,7 @@ driveSaveHistoryBtn.addEventListener('click', async () => {
   driveStatus.textContent = '保存中...';
   driveSaveHistoryBtn.disabled = true;
   try {
-    await driveSync.saveHistory(llm.history);
+    await storage.saveHistory(llm.history);
     driveStatus.textContent = `✅ 履歴を保存しました (${llm.history.length} 件)`;
   } catch (err) {
     driveStatus.textContent = `❌ ${err.message}`;
@@ -546,7 +560,7 @@ driveLoadHistoryBtn.addEventListener('click', async () => {
   driveStatus.textContent = '読み込み中...';
   driveLoadHistoryBtn.disabled = true;
   try {
-    const data = await driveSync.loadHistory();
+    const data = await storage.loadHistory();
     if (!data?.messages?.length) {
       driveStatus.textContent = 'Drive に保存された履歴がありません';
       return;
@@ -578,11 +592,8 @@ drivePresetApplyBtn.addEventListener('click', () => {
   llm.systemPrompt = preset.system_prompt;
   llm.model        = preset.model;
   llm.ttsLang      = preset.tts_lang;
-  llm.save();
-  localStorage.setItem('aivis_speaker_id',      preset.aivis_speaker_id || '');
-  localStorage.setItem('aivis_cloud_model_uuid', preset.aivis_cloud_model_uuid || '');
-  speech.updateAivisSettings('', preset.aivis_speaker_id || '');
-  speech.updateCloudSettings('', preset.aivis_cloud_model_uuid || '');
+  speech.updateAivisSettings(speech._aivis.baseUrl, preset.aivis_speaker_id || '');
+  speech.updateCloudSettings(speech._cloud.apiKey, preset.aivis_cloud_model_uuid || '');
 
   // フォームに反映
   document.getElementById('setting-model').value             = llm.model;
@@ -612,7 +623,7 @@ drivePresetSaveBtn.addEventListener('click', async () => {
   drivePresetSaveBtn.disabled = true;
   try {
     _cachedPresets.push(newPreset);
-    await driveSync.savePresets(_cachedPresets);
+    await storage.savePresets(_cachedPresets);
     updatePresetSelect();
     drivePresetNameInput.value = '';
     driveStatus.textContent = `✅ 「${name}」を保存しました`;
@@ -636,7 +647,7 @@ drivePresetDeleteBtn.addEventListener('click', async () => {
   const prev = [..._cachedPresets];
   try {
     _cachedPresets = _cachedPresets.filter(p => p.id !== id);
-    await driveSync.savePresets(_cachedPresets);
+    await storage.savePresets(_cachedPresets);
     updatePresetSelect();
     driveStatus.textContent = `✅ 「${preset.name}」を削除しました`;
   } catch (err) {
@@ -652,10 +663,8 @@ driveSaveBtn.addEventListener('click', async () => {
   driveStatus.textContent = '保存中...';
   driveSaveBtn.disabled = true;
   try {
-    const settings = {};
-    for (const k of SYNC_KEYS) settings[k] = localStorage.getItem(k) ?? '';
-    await driveSync.saveSettings(settings);
-    driveStatus.textContent = '✅ Google Drive に保存しました';
+    await storage.saveSettings(collectSettings());
+    driveStatus.textContent = '✅ 設定を保存しました';
   } catch (err) {
     driveStatus.textContent = `❌ ${err.message}`;
     console.error(err);
@@ -668,34 +677,23 @@ driveLoadBtn.addEventListener('click', async () => {
   driveStatus.textContent = '読み込み中...';
   driveLoadBtn.disabled = true;
   try {
-    const settings = await driveSync.loadSettings();
+    const settings = await storage.loadSettings();
     if (!settings) {
-      driveStatus.textContent = 'Drive に設定が見つかりませんでした';
+      driveStatus.textContent = '保存された設定が見つかりませんでした';
       return;
     }
-    // localStorage に書き込み
-    for (const k of SYNC_KEYS) {
-      if (k in settings) localStorage.setItem(k, settings[k]);
-    }
-    // LLM クライアントに反映
-    llm.endpoint     = settings.llm_endpoint     ?? llm.endpoint;
-    llm.apiKey       = settings.llm_api_key       ?? llm.apiKey;
-    llm.model        = settings.llm_model         ?? llm.model;
-    llm.systemPrompt = settings.llm_system_prompt ?? llm.systemPrompt;
-    llm.ttsLang      = settings.llm_tts_lang      ?? llm.ttsLang;
-    // Aivis に反映
-    speech.updateAivisSettings(settings.aivis_url || '', settings.aivis_speaker_id || '');
-    speech.updateCloudSettings(settings.aivis_cloud_api_key || '', settings.aivis_cloud_model_uuid || '');
+    applySettings(settings);
     // 設定フォームに反映 (パネルが開いている場合)
     document.getElementById('setting-endpoint').value          = llm.endpoint;
     document.getElementById('setting-api-key').value           = llm.apiKey;
     document.getElementById('setting-model').value             = llm.model;
     document.getElementById('setting-system-prompt').value     = llm.systemPrompt;
     document.getElementById('setting-tts-lang').value          = llm.ttsLang;
-    document.getElementById('setting-aivis-url').value         = settings.aivis_url || '';
-    document.getElementById('setting-aivis-speaker').value     = settings.aivis_speaker_id || '';
-    document.getElementById('setting-cloud-api-key').value     = settings.aivis_cloud_api_key || '';
-    document.getElementById('setting-cloud-model-uuid').value  = settings.aivis_cloud_model_uuid || '';
+    const ss = speech.getSettings();
+    document.getElementById('setting-aivis-url').value         = ss.aivis_url              || '';
+    document.getElementById('setting-aivis-speaker').value     = ss.aivis_speaker_id        || '';
+    document.getElementById('setting-cloud-api-key').value     = ss.aivis_cloud_api_key    || '';
+    document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
     driveStatus.textContent = '✅ 設定を読み込みました';
   } catch (err) {
     driveStatus.textContent = `❌ ${err.message}`;
@@ -714,7 +712,7 @@ driveVrmUploadInput.addEventListener('change', async (e) => {
   driveStatus.textContent = `アップロード中: ${file.name} ...`;
   driveUploadVrmBtn.disabled = true;
   try {
-    await driveSync.uploadVRM(file, (pct) => {
+    await storage.uploadVRM(file, (pct) => {
       driveStatus.textContent = `アップロード中: ${file.name} ${pct}%`;
     });
     driveStatus.textContent = `✅ ${file.name} をアップロードしました`;
@@ -734,7 +732,7 @@ driveListVrmBtn.addEventListener('click', async () => {
   driveApplyVrmBtn.classList.add('hidden');
   driveListVrmBtn.disabled = true;
   try {
-    const files = await driveSync.listVRMFiles();
+    const files = await storage.listVRMFiles();
     if (files.length === 0) {
       driveStatus.textContent = 'Drive に VRM ファイルがありません';
       return;
@@ -766,7 +764,7 @@ driveApplyVrmBtn.addEventListener('click', async () => {
   driveStatus.textContent = `ダウンロード中: ${fileName} ...`;
   driveApplyVrmBtn.disabled = true;
   try {
-    const arrayBuffer = await driveSync.downloadVRM(fileId);
+    const arrayBuffer = await storage.downloadVRM(fileId);
     const file = new File([arrayBuffer], fileName, { type: 'application/octet-stream' });
 
     settingsPanel.classList.add('hidden');
@@ -794,6 +792,25 @@ driveApplyVrmBtn.addEventListener('click', async () => {
     loadVrmBtn.disabled = false;
   }
 });
+
+// ---- アプリ初期化 ----
+
+async function initApp() {
+  // IndexedDB を開く
+  await local.init();
+
+  // Google Drive セッション復元（完了後に onSignInChange が発火する場合がある）
+  await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+
+  // サインイン状態に応じたバックエンドから設定を読み込む
+  const saved = await storage.loadSettings().catch(() => null);
+  applySettings(saved);
+
+  // プリセットを読み込む
+  refreshPresets();
+}
+
+initApp().catch(err => console.warn('App init error:', err));
 
 // ---- PWA: Service Worker 登録 ----
 if ('serviceWorker' in navigator) {

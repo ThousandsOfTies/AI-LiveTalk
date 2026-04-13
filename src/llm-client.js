@@ -22,23 +22,35 @@ AIアシスタントのような「何かお手伝いしましょうか？」と
 
 export class LLMClient {
   constructor() {
-    this.endpoint = localStorage.getItem('llm_endpoint') || DEFAULTS.endpoint;
-    this.apiKey = localStorage.getItem('llm_api_key') || DEFAULTS.apiKey;
-    this.model = localStorage.getItem('llm_model') || DEFAULTS.model;
-    this.systemPrompt = localStorage.getItem('llm_system_prompt') || DEFAULTS.systemPrompt;
-    this.ttsLang = localStorage.getItem('llm_tts_lang') || DEFAULTS.ttsLang;
+    this.endpoint = DEFAULTS.endpoint;
+    this.apiKey = DEFAULTS.apiKey;
+    this.model = DEFAULTS.model;
+    this.systemPrompt = DEFAULTS.systemPrompt;
+    this.ttsLang = DEFAULTS.ttsLang;
     this.history = [];
 
     /** 感情検出時に呼ばれるコールバック @type {function(string):void} */
     this.onEmotionDetected = null;
   }
 
-  save() {
-    localStorage.setItem('llm_endpoint', this.endpoint);
-    localStorage.setItem('llm_api_key', this.apiKey);
-    localStorage.setItem('llm_model', this.model);
-    localStorage.setItem('llm_system_prompt', this.systemPrompt);
-    localStorage.setItem('llm_tts_lang', this.ttsLang);
+  /** 設定を一括適用する */
+  applySettings(s) {
+    if (s.llm_endpoint)     this.endpoint     = s.llm_endpoint;
+    if (s.llm_api_key)      this.apiKey       = s.llm_api_key;
+    if (s.llm_model)        this.model        = s.llm_model;
+    if (s.llm_system_prompt !== undefined) this.systemPrompt = s.llm_system_prompt;
+    if (s.llm_tts_lang)     this.ttsLang      = s.llm_tts_lang;
+  }
+
+  /** 現在の設定をオブジェクトとして返す */
+  getSettings() {
+    return {
+      llm_endpoint:     this.endpoint,
+      llm_api_key:      this.apiKey,
+      llm_model:        this.model,
+      llm_system_prompt: this.systemPrompt,
+      llm_tts_lang:     this.ttsLang,
+    };
   }
 
   clearHistory() {

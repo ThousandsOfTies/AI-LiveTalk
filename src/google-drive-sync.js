@@ -1,12 +1,17 @@
-const CLIENT_ID = '621890386200-r7p3me2gc0t4dbbo6qfmhjlrvo4ibl4s.apps.googleusercontent.com';
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 const SETTINGS_FILE = 'vrllm-settings.json';
 const VRM_FOLDER = 'VRLLM';
+const SESSION_KEY = 'vrllm_google_session';
+// アクセストークンの有効期限より少し短めに設定（秒）
+const TOKEN_LIFETIME_SEC = 3500;
 
 export class GoogleDriveSync {
   constructor() {
     this._token = null;
     this._tokenClient = null;
+    this._tokenExpiry = 0; // Unix ms
+    this._email = null;
     this.onSignInChange = null; // callback(isSignedIn: boolean)
   }
 
@@ -17,12 +22,77 @@ export class GoogleDriveSync {
     this._tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
-      callback: (resp) => {
-        if (resp.error) { console.error('OAuth error:', resp.error); return; }
+      callback: async (resp) => {
+        if (resp.error) {
+          // サイレント再認証が失敗した場合は静かに無視（手動サインインを待つ）
+          if (resp.error === 'immediate_failed' || resp.error === 'user_cancelled') return;
+          console.error('OAuth error:', resp.error);
+          return;
+        }
         this._token = resp.access_token;
+        this._tokenExpiry = Date.now() + TOKEN_LIFETIME_SEC * 1000;
+        await this._fetchAndSaveEmail();
         this.onSignInChange?.(true);
       },
     });
+
+    // 保存済みセッションの復元を試みる
+    await this._tryRestoreSession();
+  }
+
+  // ---- セッション永続化 ----
+
+  _saveSession() {
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        token: this._token,
+        expiry: this._tokenExpiry,
+        email: this._email,
+      }));
+    } catch (_) {}
+  }
+
+  _clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+  }
+
+  async _tryRestoreSession() {
+    let saved;
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      saved = JSON.parse(raw);
+    } catch (_) { return; }
+
+    const { token, expiry, email } = saved;
+
+    // トークンがまだ有効期限内の場合はそのまま復元
+    if (token && expiry && Date.now() < expiry) {
+      this._token = token;
+      this._tokenExpiry = expiry;
+      this._email = email ?? null;
+      this.onSignInChange?.(true);
+      return;
+    }
+
+    // 期限切れだがメールヒントがある場合はサイレント再認証を試みる
+    if (email && this._tokenClient) {
+      this._tokenClient.requestAccessToken({ prompt: '', hint: email });
+      // 結果は callback で処理される
+    }
+  }
+
+  async _fetchAndSaveEmail() {
+    try {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${this._token}` },
+      });
+      if (res.ok) {
+        const info = await res.json();
+        this._email = info.email ?? null;
+      }
+    } catch (_) {}
+    this._saveSession();
   }
 
   _loadGIS() {
@@ -42,12 +112,17 @@ export class GoogleDriveSync {
 
   signIn() {
     if (!this._tokenClient) throw new Error('初期化中です。少し待ってからお試しください');
-    this._tokenClient.requestAccessToken({ prompt: '' });
+    // 既知のアカウントがあればヒントを渡す（アカウント選択をスキップできる場合がある）
+    const opts = this._email ? { prompt: '', hint: this._email } : { prompt: 'select_account' };
+    this._tokenClient.requestAccessToken(opts);
   }
 
   signOut() {
     if (this._token) google.accounts.oauth2.revoke(this._token, () => {});
     this._token = null;
+    this._tokenExpiry = 0;
+    this._email = null;
+    this._clearSession();
     this.onSignInChange?.(false);
   }
 
@@ -283,6 +358,8 @@ export class GoogleDriveSync {
     const res = await fetch(url, { ...options, headers });
     if (res.status === 401) {
       this._token = null;
+      this._tokenExpiry = 0;
+      this._clearSession();
       this.onSignInChange?.(false);
       throw new Error('認証の有効期限が切れました。再度サインインしてください');
     }
