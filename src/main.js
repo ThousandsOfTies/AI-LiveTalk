@@ -205,6 +205,10 @@ async function sendMessage(text) {
     setInputEnabled(true);
     // タッチデバイスではフォーカスするとキーボードが再出現するので抑制
     if (!navigator.maxTouchPoints) chatInput.focus();
+    // 会話モード: TTS終了後に自動でマイクON
+    if (autoListenMode && !speech.isListening) {
+      startListeningOnce();
+    }
   }
 }
 
@@ -225,14 +229,10 @@ if (!speech.sttSupported) {
   micBtn.title = 'このブラウザは音声認識に非対応です';
 }
 
-micBtn.addEventListener('click', () => {
-  if (speech.isListening) {
-    speech.stopListening();
-    micBtn.classList.remove('active');
-    setStatus('');
-    return;
-  }
+// 会話モード: TTS終了後に自動でマイクON (長押しでON/OFF)
+let autoListenMode = false;
 
+function startListeningOnce() {
   speech.setLang(llm.ttsLang);
   speech.startListening();
   micBtn.classList.add('active');
@@ -242,6 +242,89 @@ micBtn.addEventListener('click', () => {
     micBtn.classList.remove('active');
     sendMessage(text);
   };
+
+  // 認識タイムアウト等でリスニングが終了した際のUI復元 & 会話モード継続
+  speech.onListeningEnd = () => {
+    micBtn.classList.remove('active');
+    if (autoListenMode && !chatInput.disabled) {
+      startListeningOnce();
+    } else if (!autoListenMode) {
+      setStatus('');
+    }
+  };
+}
+
+function enterAutoListen() {
+  autoListenMode = true;
+  micBtn.classList.add('auto-listen');
+  micBtn.title = '会話モード中 (長押しで終了)';
+  setStatus('会話モード ON');
+  if (!speech.isListening && !chatInput.disabled) {
+    startListeningOnce();
+  }
+}
+
+function exitAutoListen() {
+  autoListenMode = false;
+  micBtn.classList.remove('auto-listen');
+  micBtn.title = '音声入力 (クリックで開始/停止)';
+  if (speech.isListening) {
+    speech.stopListening();
+    micBtn.classList.remove('active');
+  }
+  setStatus('');
+}
+
+// 長押し検出 (600ms)
+let _longPressTimer = null;
+let _longPressTriggered = false;
+
+micBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // 長押しコンテキストメニューを抑制
+
+micBtn.addEventListener('pointerdown', () => {
+  if (micBtn.disabled) return;
+  _longPressTriggered = false;
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    _longPressTriggered = true;
+    if (autoListenMode) exitAutoListen();
+    else enterAutoListen();
+  }, 600);
+});
+
+micBtn.addEventListener('pointerup', () => {
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
+  if (_longPressTriggered) return; // 長押し済みはクリック処理をスキップ
+
+  // 短押し: 会話モード中なら終了、それ以外は通常のON/OFF
+  if (autoListenMode) {
+    exitAutoListen();
+    return;
+  }
+  if (speech.isListening) {
+    speech.stopListening();
+    micBtn.classList.remove('active');
+    setStatus('');
+    return;
+  }
+  startListeningOnce();
+});
+
+micBtn.addEventListener('pointerleave', () => {
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
+});
+
+micBtn.addEventListener('pointercancel', () => {
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
 });
 
 // ---- 設定パネル ----

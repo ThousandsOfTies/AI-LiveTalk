@@ -13,6 +13,8 @@ export class SpeechManager {
     /** @type {function(string):void} */
     this.onTranscript = null;
     /** @type {function():void} */
+    this.onListeningEnd = null;
+    /** @type {function():void} */
     this.onSpeechStart = null;
     /** @type {function():void} */
     this.onSpeechEnd = null;
@@ -97,6 +99,7 @@ export class SpeechManager {
 
     this._recognition.onend = () => {
       this.isListening = false;
+      this.onListeningEnd?.();
     };
 
     this._recognition.onerror = (e) => {
