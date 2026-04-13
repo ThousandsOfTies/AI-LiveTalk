@@ -335,14 +335,17 @@ if (navigator.maxTouchPoints > 0) {
       viewer.resize();
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
-      // キーボード非表示後のレイアウト変更でスクロール位置が先頭に戻らないよう復元
-      if (distanceFromBottom < 80) {
-        // 最下部付近だった場合は最新メッセージへスクロール
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      } else {
-        // 上方向にスクロール中だった場合は相対位置を維持
-        chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight - distanceFromBottom;
-      }
+      // iOS Safari は window.scrollTo() 後に非同期でスクロール位置をリセットするため、
+      // requestAnimationFrame で次フレームまで遅延させてから復元する
+      requestAnimationFrame(() => {
+        if (distanceFromBottom < 80) {
+          // 最下部付近だった場合は最新メッセージへスクロール
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        } else {
+          // 上方向にスクロール中だった場合は相対位置を維持
+          chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight - distanceFromBottom;
+        }
+      });
     }, 300);
   });
 }
