@@ -328,11 +328,21 @@ if (navigator.maxTouchPoints > 0) {
     viewerPanel.style.display = 'none';
   });
   chatInput.addEventListener('blur', () => {
+    // レイアウト変更前のスクロール位置（下端からの距離）を保存
+    const distanceFromBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
     setTimeout(() => {
       viewerPanel.style.display = '';
       viewer.resize();
       window.scrollTo(0, 0);
       document.body.scrollTop = 0;
+      // キーボード非表示後のレイアウト変更でスクロール位置が先頭に戻らないよう復元
+      if (distanceFromBottom < 80) {
+        // 最下部付近だった場合は最新メッセージへスクロール
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      } else {
+        // 上方向にスクロール中だった場合は相対位置を維持
+        chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight - distanceFromBottom;
+      }
     }, 300);
   });
 }
