@@ -517,11 +517,14 @@ function avatarColorFromName(name) {
   const code = [...name].reduce((s, c) => s + c.charCodeAt(0), 0);
   return AVATAR_COLORS[code % AVATAR_COLORS.length];
 }
-function getInitials(name) {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return parts[0].slice(0, 2).toUpperCase();
+function getInitials(name, email) {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email) return email[0].toUpperCase();
+  return '?';
 }
 
 function updateDriveSyncUI(isSignedIn) {
@@ -534,9 +537,10 @@ function updateDriveSyncUI(isSignedIn) {
 
   if (isSignedIn) {
     // イニシャルをセット（画像が読めなかった場合のフォールバック）
-    const name = driveSync.name;
-    initials.textContent = getInitials(name);
-    initials.style.background = avatarColorFromName(name);
+    const name  = driveSync.name;
+    const email = driveSync.email;
+    initials.textContent = getInitials(name, email);
+    initials.style.background = avatarColorFromName(name || email);
     initials.style.display = '';
 
     const pic = driveSync.picture;
