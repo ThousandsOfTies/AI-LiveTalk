@@ -20,10 +20,8 @@ export class SpeechManager {
     this.onSpeechEnd = null;
 
     // Aivis Cloud API クライアント（最優先）
-    // 環境変数（ビルド時埋め込み）を初期値とし、applySettings() で上書きされる
-    const cloudApiKey    = import.meta.env.VITE_AIVIS_CLOUD_API_KEY    || '';
-    const cloudModelUuid = import.meta.env.VITE_AIVIS_CLOUD_MODEL_UUID || '';
-    this._cloud = new AivisCloudClient(cloudApiKey, cloudModelUuid);
+    // 設定画面または Google Drive 同期から applySettings() で設定される
+    this._cloud = new AivisCloudClient('', '');
     this._useCloud = this._cloud.isAvailable();
     if (this._useCloud) console.log('[TTS] Aivis Cloud API を使用します');
 
@@ -111,17 +109,20 @@ export class SpeechManager {
     this._recognition.interimResults = false;
 
     this._recognition.onresult = (e) => {
+      clearTimeout(this._recognitionTimer);
       const text = e.results[0][0].transcript;
       this.isListening = false;
       this.onTranscript?.(text);
     };
 
     this._recognition.onend = () => {
+      clearTimeout(this._recognitionTimer);
       this.isListening = false;
       this.onListeningEnd?.();
     };
 
     this._recognition.onerror = (e) => {
+      clearTimeout(this._recognitionTimer);
       console.error('STT エラー:', e.error);
       this.isListening = false;
     };
@@ -135,10 +136,20 @@ export class SpeechManager {
     if (!this._recognition || this.isListening) return;
     this._recognition.start();
     this.isListening = true;
+
+    // セーフティネット: 一定時間(15秒)経っても終了しない場合は強制停止
+    clearTimeout(this._recognitionTimer);
+    this._recognitionTimer = setTimeout(() => {
+      if (this.isListening) {
+        console.warn('[STT] 無音タイムアウトにより強制終了');
+        this.stopListening();
+      }
+    }, 15000);
   }
 
   stopListening() {
     if (!this._recognition || !this.isListening) return;
+    clearTimeout(this._recognitionTimer);
     this._recognition.stop();
     this.isListening = false;
   }
