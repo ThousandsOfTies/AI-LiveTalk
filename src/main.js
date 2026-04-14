@@ -727,11 +727,50 @@ function updateDriveSyncUI(isSignedIn) {
 driveSync.onSignInChange = (isSignedIn) => {
   updateDriveSyncUI(isSignedIn);
   if (isSignedIn) {
-    // Drive から設定を再読み込みして適用
-    storage.loadSettings().then(s => {
+    driveStatus.textContent = '読み込み中...';
+    storage.loadSettings().then(async s => {
+      if (!s) {
+        driveStatus.textContent = '⚠️ Drive に設定がまだ保存されていません';
+        return;
+      }
+      const prevVrmId = _currentVrmId;
       applySettings(s);
       driveAutosaveChk.checked = _autoSaveEnabled;
-    }).catch(() => {});
+
+      // 設定パネルが開いていれば表示を更新
+      if (!settingsPanel.classList.contains('hidden')) {
+        document.getElementById('setting-endpoint').value      = llm.endpoint;
+        document.getElementById('setting-api-key').value       = llm.apiKey;
+        document.getElementById('setting-model').value         = llm.model;
+        document.getElementById('setting-system-prompt').value = _vrmSystemPrompts[_currentVrmId] ?? llm.systemPrompt;
+        document.getElementById('setting-tts-lang').value      = llm.ttsLang;
+        const ss = speech.getSettings();
+        document.getElementById('setting-aivis-url').value         = ss.aivis_url || '';
+        document.getElementById('setting-aivis-speaker').value     = ss.aivis_speaker_id || '';
+        document.getElementById('setting-cloud-api-key').value     = ss.aivis_cloud_api_key || '';
+        document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
+      }
+
+      // Drive から設定を読んだ結果 VRM が変わっていれば読み込む
+      if (_currentVrmId !== prevVrmId && _currentVrmId !== '__builtin__') {
+        try {
+          const buf = await storage.downloadVRM(_currentVrmId);
+          const fname = _vrmFileNames[_currentVrmId] || _currentVrmId;
+          const file = new File([buf], fname, { type: 'application/octet-stream' });
+          await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
+          await loadDefaultVRMA(true);
+          setStatus('');
+        } catch (err) {
+          console.warn('Drive サインイン後の VRM 読み込み失敗:', err.message);
+        }
+      }
+
+      await refreshPresets();
+      driveStatus.textContent = '✅ Drive から設定を読み込みました';
+      setTimeout(() => { if (driveStatus.textContent.includes('読み込みました')) driveStatus.textContent = ''; }, 3000);
+    }).catch(err => {
+      driveStatus.textContent = `❌ 設定の読み込みに失敗しました: ${err.message}`;
+    });
   }
 };
 
