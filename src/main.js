@@ -142,6 +142,7 @@ async function _handleVrmSelect(val) {
     _currentVrmId = '__builtin__';
     _updateVrmEditRow();
     await loadBuiltinVRM();
+    storage.saveSettings(collectSettings()).catch(() => {});
     return;
   }
   _currentVrmId = val;
@@ -155,6 +156,7 @@ async function _handleVrmSelect(val) {
     await viewer.loadVRM(file, (pct) => { vrmLoadStatus.textContent = `読み込み中... ${pct}%`; });
     vrmLoadStatus.textContent = `✅ ${_vrmCharNames[val] || fname}`;
     setStatus('');
+    storage.saveSettings(collectSettings()).catch(() => {});
     try {
       await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true });
       vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
@@ -226,8 +228,7 @@ vrmFileInput.addEventListener('change', async (e) => {
   }
 });
 
-// 起動時にビルトインモデルを自動ロード
-loadBuiltinVRM();
+// 起動時のVRMロードは initApp() 内で設定復元後に実行
 
 // ---- VRMA 読み込み ----
 loadVRMABtn.addEventListener('click', () => vrmaFileInput.click());
@@ -579,6 +580,7 @@ function collectSettings() {
     ...speech.getSettings(),
     autosave_history: String(_autoSaveEnabled),
     vrm_char_names: JSON.stringify(_vrmCharNames),
+    selected_vrm_id: _currentVrmId,
   };
 }
 
@@ -590,6 +592,7 @@ function applySettings(s) {
   if (s.vrm_char_names) {
     try { _vrmCharNames = JSON.parse(s.vrm_char_names); } catch { _vrmCharNames = {}; }
   }
+  if (s.selected_vrm_id) _currentVrmId = s.selected_vrm_id;
 }
 
 function scheduleHistorySave() {
@@ -712,9 +715,37 @@ async function initApp() {
   // Google Drive セッション復元（完了後に onSignInChange が発火する場合がある）
   await driveSync.init().catch(err => console.warn('Drive sync init:', err));
 
-  // サインイン状態に応じたバックエンドから設定を読み込む
+  // サインイン状態に応じたバックエンドから設定を読み込む（selected_vrm_id も復元される）
   const saved = await storage.loadSettings().catch(() => null);
   applySettings(saved);
+
+  // 前回選択していたモデルを起動時にロード
+  if (_currentVrmId === '__builtin__') {
+    await loadBuiltinVRM();
+  } else {
+    // ストレージから前回のモデルを読み込む
+    setStatus('モデルを読み込み中...');
+    vrmModelSelect.disabled = true;
+    try {
+      const files = await storage.listVRMFiles();
+      const f = files.find(f => f.id === _currentVrmId);
+      if (!f) throw new Error('保存されたモデルが見つかりません');
+      _vrmFileNames[f.id] = f.name;
+      const buf = await storage.downloadVRM(_currentVrmId);
+      const file = new File([buf], f.name, { type: 'application/octet-stream' });
+      await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
+      setStatus('デフォルトモーション適用中...');
+      await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
+      vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
+      setStatus('');
+    } catch (err) {
+      console.warn('前回のモデル読み込み失敗、ビルトインに戻します:', err.message);
+      _currentVrmId = '__builtin__';
+      await loadBuiltinVRM();
+    } finally {
+      vrmModelSelect.disabled = false;
+    }
+  }
 }
 
 initApp().catch(err => console.warn('App init error:', err));
