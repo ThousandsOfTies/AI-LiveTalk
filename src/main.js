@@ -53,7 +53,9 @@ async function loadDefaultVRMA(isIdle = false) {
 
 /** 現在の設定をストレージに非同期保存（失敗はコンソール警告のみ） */
 function saveSettings() {
-  saveSettings();
+  storage.saveSettings(collectSettings()).catch(err =>
+    console.warn('設定保存失敗:', err.message)
+  );
 }
 
 async function refreshVRMList(selectId = undefined) {
@@ -787,6 +789,22 @@ async function initApp() {
 }
 
 initApp().catch(err => console.warn('App init error:', err));
+
+// ---- スクリーンロック防止 (Wake Lock API) ----
+let _wakeLock = null;
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    _wakeLock = await navigator.wakeLock.request('screen');
+  } catch (err) {
+    console.warn('Wake Lock 取得失敗:', err.message);
+  }
+}
+acquireWakeLock();
+// タブが再び表示されたとき（ロック解除後など）に再取得
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') acquireWakeLock();
+});
 
 // ---- PWA: Service Worker 登録 ----
 if ('serviceWorker' in navigator) {
