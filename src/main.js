@@ -324,6 +324,19 @@ async function sendMessage(text) {
 
   appendMessage('user', text, true);  // 送信時は強制スクロール
 
+  // API キー未設定の場合はキャラが案内して終了
+  if (!llm.apiKey) {
+    const msg = 'APIキーがまだ設定されていないみたい。右上の設定ボタンから、LLMタブでAPIキーを入れてね！';
+    appendMessage('assistant', msg, true);
+    viewer.applyEmotion('neutral');
+    const p = new TTSPipeline(speech);
+    p.onSpeechStart = () => { lipSync.start(); viewer.startTalking(); };
+    p.onSpeechEnd   = () => { lipSync.stop(); viewer.stopTalking(); viewer.resetExpressions(); };
+    p.push(msg);
+    await p.done({ lang: llm.ttsLang });
+    return;
+  }
+
   const assistantEl = appendMessage('assistant', '', true);
   const textNode = assistantEl.querySelector('.message-text');
 
