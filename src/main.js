@@ -42,6 +42,7 @@ let _currentVrmId      = '__builtin__'; // 現在選択中のVRM ID（__builtin_
 let _vrmCharNames      = {};           // { [fileId]: string } 各モデルの表示名
 let _vrmFileNames      = {};           // { [fileId]: string } 各モデルの元ファイル名
 let _vrmSystemPrompts  = {};           // { [fileId]: string } 各モデルのシステムプロンプト
+let _aiAvatarUrl       = null;         // VRMロード後のスナップショット（データURL）
 
 const DEFAULT_VRMA = 'vrma/VRMA_03.vrma';
 
@@ -56,6 +57,17 @@ function saveSettings() {
   storage.saveSettings(collectSettings()).catch(err =>
     console.warn('設定保存失敗:', err.message)
   );
+}
+
+/** VRMキャンバスのスナップショットをAIアバターとして保存 */
+function captureAiAvatar() {
+  requestAnimationFrame(() => {
+    try {
+      _aiAvatarUrl = canvas.toDataURL('image/jpeg', 0.8);
+    } catch (err) {
+      console.warn('AIアバター取得失敗:', err.message);
+    }
+  });
 }
 
 async function refreshVRMList(selectId = undefined) {
@@ -194,6 +206,7 @@ async function _handleVrmSelect(val) {
     } catch (vrmaErr) {
       console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
     }
+    captureAiAvatar();
   } catch (err) {
     vrmLoadStatus.textContent = `❌ ${err.message}`;
     console.error(err);
@@ -211,6 +224,7 @@ async function loadBuiltinVRM() {
     await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
     vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
     setStatus('');
+    captureAiAvatar();
   } catch (err) {
     setStatus(`モデル読み込みエラー: ${err.message}`);
     console.error(err);
@@ -728,6 +742,7 @@ function updateDriveSyncUI(isSignedIn) {
 driveSync.onSignInChange = (isSignedIn) => {
   updateDriveSyncUI(isSignedIn);
   if (isSignedIn) {
+    updateUserAvatars();
     driveStatus.textContent = '読み込み中...';
     storage.loadSettings().then(async s => {
       if (!s) {
@@ -761,6 +776,7 @@ driveSync.onSignInChange = (isSignedIn) => {
           await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
           await loadDefaultVRMA(true);
           setStatus('');
+          captureAiAvatar();
         } catch (err) {
           console.warn('Drive サインイン後の VRM 読み込み失敗:', err.message);
         }
@@ -829,6 +845,7 @@ async function initApp() {
       setStatus('デフォルトモーション適用中...');
       await loadDefaultVRMA(true);
       setStatus('');
+      captureAiAvatar();
     } catch (err) {
       console.warn('前回のモデル読み込み失敗、ビルトインに戻します:', err.message);
       _currentVrmId = '__builtin__';
@@ -910,7 +927,7 @@ function appendMessage(role, text, force = false) {
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
   wrap.innerHTML = `
-    <div class="message-avatar">${role === 'user' ? '👤' : '🤖'}</div>
+    <div class="message-avatar">${getAvatarHtml(role)}</div>
     <div class="message-bubble">
       <div class="message-text">${escapeHtml(text)}</div>
     </div>
@@ -918,6 +935,22 @@ function appendMessage(role, text, force = false) {
   chatMessages.appendChild(wrap);
   scrollToBottom(force);
   return wrap;
+}
+
+function getAvatarHtml(role) {
+  if (role === 'user') {
+    const pic = driveSync.picture;
+    return pic ? `<img src="${pic}" class="avatar-img" alt="user">` : '👤';
+  }
+  return _aiAvatarUrl ? `<img src="${_aiAvatarUrl}" class="avatar-img" alt="AI">` : '🤖';
+}
+
+/** Googleサインイン時などに既存のユーザーアイコンをまとめて更新 */
+function updateUserAvatars() {
+  const pic = driveSync.picture;
+  const html = pic ? `<img src="${pic}" class="avatar-img" alt="user">` : '👤';
+  chatMessages.querySelectorAll('.message.user .message-avatar')
+    .forEach(el => { el.innerHTML = html; });
 }
 
 function escapeHtml(str) {
