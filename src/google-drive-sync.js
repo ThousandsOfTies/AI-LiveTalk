@@ -1,5 +1,5 @@
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
+const SCOPES = 'email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 const SETTINGS_FILE = 'vrllm-settings.json';
 const VRM_FOLDER = 'VRLLM';
 const SESSION_KEY = 'vrllm_google_session';
@@ -90,6 +90,7 @@ export class GoogleDriveSync {
 
   get picture() { return this._picture; }
   get name()    { return this._name; }
+  get email()   { return this._email; }
 
   async _fetchAndSaveEmail() {
     try {
