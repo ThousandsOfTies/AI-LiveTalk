@@ -134,6 +134,14 @@ body {
   padding-bottom: 2px;
 }
 
+.avatar-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
 .message-bubble {
   max-width: 82%;
   padding: 10px 14px;
