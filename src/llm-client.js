@@ -11,9 +11,9 @@ const EMOTION_INSTRUCTION = `
 感情タグは先頭の1回だけ。返答本文の中には入れないでください。`;
 
 const DEFAULTS = {
-  endpoint: import.meta.env.VITE_LLM_ENDPOINT || 'https://api.openai.com/v1',
-  apiKey: import.meta.env.VITE_LLM_API_KEY || '',
-  model: import.meta.env.VITE_LLM_MODEL || 'gpt-4o-mini',
+  endpoint: 'https://api.openai.com/v1',
+  apiKey: '',
+  model: 'gpt-4o-mini',
   systemPrompt: `あなたの名前はリリムです。あなたは私の親しい友達です。タメ口で、フレンドリーにおしゃべりしてください。
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,

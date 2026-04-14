@@ -20,10 +20,8 @@ export class SpeechManager {
     this.onSpeechEnd = null;
 
     // Aivis Cloud API クライアント（最優先）
-    // 環境変数（ビルド時埋め込み）を初期値とし、applySettings() で上書きされる
-    const cloudApiKey    = import.meta.env.VITE_AIVIS_CLOUD_API_KEY    || '';
-    const cloudModelUuid = import.meta.env.VITE_AIVIS_CLOUD_MODEL_UUID || '';
-    this._cloud = new AivisCloudClient(cloudApiKey, cloudModelUuid);
+    // 設定画面または Google Drive 同期から applySettings() で設定される
+    this._cloud = new AivisCloudClient('', '');
     this._useCloud = this._cloud.isAvailable();
     if (this._useCloud) console.log('[TTS] Aivis Cloud API を使用します');
 
