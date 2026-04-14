@@ -53,7 +53,9 @@ async function loadDefaultVRMA(isIdle = false) {
 
 /** 現在の設定をストレージに非同期保存（失敗はコンソール警告のみ） */
 function saveSettings() {
-  saveSettings();
+  storage.saveSettings(collectSettings()).catch(err =>
+    console.warn('設定保存失敗:', err.message)
+  );
 }
 
 async function refreshVRMList(selectId = undefined) {
