@@ -142,9 +142,11 @@ document.getElementById('vrm-delete-btn').addEventListener('click', async () => 
     delete _vrmCharNames[_currentVrmId];
     delete _vrmFileNames[_currentVrmId];
     delete _vrmSystemPrompts[_currentVrmId];
-    _currentVrmId = '__builtin__';
     vrmLoadStatus.textContent = '';
     await refreshVRMList('__builtin__');
+    // リストからの選択と同様にデフォルト VRM をロード
+    _applyVrmSystemPrompt('__builtin__');
+    await loadBuiltinVRM();
     saveSettings();
   } catch (err) {
     vrmLoadStatus.textContent = `❌ ${err.message}`;
