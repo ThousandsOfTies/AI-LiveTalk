@@ -87,14 +87,14 @@
           <div id="vrm-edit-row" class="hidden">
             <label>
               キャラ名
-              <input type="text" id="vrm-char-name" placeholder="表示名を入力">
+              <input type="text" id="vrm-char-name" placeholder="表示名を入力" autocomplete="off">
             </label>
             <button type="button" id="vrm-delete-btn">🗑 削除</button>
           </div>
           <span id="vrm-load-status" class="hint"></span>
           <label>
             システムプロンプト
-            <textarea id="setting-system-prompt" rows="6"></textarea>
+            <textarea id="setting-system-prompt" rows="6" autocomplete="off"></textarea>
           </label>
         </div>
 
@@ -103,16 +103,16 @@
           <label>
             APIエンドポイント
             <span class="hint">OpenAI互換ならOllama (http://localhost:11434/v1) も可</span>
-            <input type="text" id="setting-endpoint" placeholder="https://api.openai.com/v1">
+            <input type="text" id="setting-endpoint" placeholder="https://api.openai.com/v1" autocomplete="off">
           </label>
           <label>
             APIキー
             <span class="hint">Ollamaはダミー文字列でも可 (例: ollama)</span>
-            <input type="password" id="setting-api-key" placeholder="sk-...">
+            <input type="password" id="setting-api-key" placeholder="sk-..." autocomplete="new-password">
           </label>
           <label>
             モデル名
-            <input type="text" id="setting-model" placeholder="gpt-4o-mini">
+            <input type="text" id="setting-model" placeholder="gpt-4o-mini" autocomplete="off">
           </label>
           <label class="drive-toggle-label">
             <input type="checkbox" id="location-chk">
@@ -135,13 +135,13 @@
           <label>
             AivisSpeech URL
             <span class="hint">起動中なら自動検出されます (デフォルト: http://localhost:10101)</span>
-            <input type="text" id="setting-aivis-url" placeholder="http://localhost:10101">
+            <input type="text" id="setting-aivis-url" placeholder="http://localhost:10101" autocomplete="off">
           </label>
           <label>
             AivisSpeech 話者ID
             <span class="hint">話者IDは AivisSpeech の画面で確認できます</span>
             <div style="display:flex;gap:8px;align-items:center">
-              <input type="number" id="setting-aivis-speaker" placeholder="888753760" style="flex:1">
+              <input type="number" id="setting-aivis-speaker" placeholder="888753760" style="flex:1" autocomplete="off">
               <button type="button" id="aivis-check-btn">疎通確認</button>
             </div>
             <span id="aivis-status" class="hint"></span>
@@ -149,12 +149,12 @@
           <label>
             Aivis Cloud API キー
             <span class="hint">Cloud API を使うと PC なしでスマホからも高品質 TTS が使えます (<a href="https://hub.aivis-project.com/cloud-api/dashboard" target="_blank">取得</a>)</span>
-            <input type="password" id="setting-cloud-api-key" placeholder="aivis-...">
+            <input type="password" id="setting-cloud-api-key" placeholder="aivis-..." autocomplete="new-password">
           </label>
           <label>
             Aivis Cloud API モデル UUID
             <span class="hint">AivisHub のモデルページ URL に含まれる UUID (<a href="https://hub.aivis-project.com/" target="_blank">モデル一覧</a>)</span>
-            <input type="text" id="setting-cloud-model-uuid" placeholder="a59cb814-0083-4369-8542-f51a29e72af7">
+            <input type="text" id="setting-cloud-model-uuid" placeholder="a59cb814-0083-4369-8542-f51a29e72af7" autocomplete="off">
           </label>
         </div>
 
