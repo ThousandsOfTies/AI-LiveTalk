@@ -499,6 +499,7 @@ micBtn.addEventListener('touchstart', (e) => {
 
 micBtn.addEventListener('pointerdown', () => {
   if (micBtn.disabled) return;
+  speech.startNoiseMonitoring();
   _longPressTriggered = false;
   _longPressTimer = setTimeout(() => {
     _longPressTimer = null;
@@ -981,11 +982,6 @@ document.addEventListener('pointerdown', acquireWakeLock, { once: true });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') acquireWakeLock();
 });
-
-// ---- ノイズモニタリング起動（最初のタッチ時にマイク許可を取得） ----
-document.addEventListener('pointerdown', () => {
-  speech.startNoiseMonitoring();
-}, { once: true });
 
 // ノイズレベル変化時にマイクボタンのアイコン・スタイルを更新
 speech.onNoiseModeChange = (isNoisy) => {
