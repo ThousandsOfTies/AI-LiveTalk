@@ -584,6 +584,10 @@ settingsBtn.addEventListener('click', () => {
     if (driveSync.isSignedIn) {
       document.getElementById('drive-autosave-chk').checked = _autoSaveEnabled;
     }
+    // 位置情報トグルの状態を反映
+    document.getElementById('location-chk').checked = _locationEnabled;
+    document.getElementById('location-status').textContent =
+      _locationEnabled && llm.locationContext ? `✅ ${llm.locationContext}` : '';
   }
 });
 
@@ -642,6 +646,52 @@ clearHistoryBtn.addEventListener('click', () => {
 let _autoSaveEnabled = false;
 let _autoSaveTimer   = null;
 
+// ---- 位置情報 ----
+
+let _locationEnabled = false;
+
+/**
+ * Nominatim (OpenStreetMap) で逆ジオコーディングして位置情報文字列を返す。
+ * 取得できなかった場合は null を返す。
+ */
+async function fetchLocationContext() {
+  if (!navigator.geolocation) return null;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json&accept-language=ja`,
+            { headers: { 'User-Agent': 'VRLLM/1.0' } }
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+          const city    = addr.city || addr.town || addr.village || addr.hamlet || '';
+          const state   = addr.state || '';
+          const country = addr.country || '';
+          const place   = [city, state, country].filter(Boolean).join('、');
+          const now     = new Date();
+          const timeStr = now.toLocaleString('ja-JP', {
+            month: 'long', day: 'numeric', weekday: 'short',
+            hour: '2-digit', minute: '2-digit',
+          });
+          resolve(`現在地: ${place}。現地日時: ${timeStr}。`);
+        } catch { resolve(null); }
+      },
+      () => resolve(null),
+      { timeout: 10_000 }
+    );
+  });
+}
+
+/** 設定で有効になっていればバックグラウンドで位置情報を取得して llm.locationContext にセットする */
+function _applyLocationIfEnabled() {
+  if (!_locationEnabled) return;
+  fetchLocationContext().then(ctx => {
+    if (ctx) llm.locationContext = ctx;
+  });
+}
+
 // ---- 設定ヘルパー ----
 
 function collectSettings() {
@@ -649,6 +699,7 @@ function collectSettings() {
     ...llm.getSettings(),
     ...speech.getSettings(),
     autosave_history: String(_autoSaveEnabled),
+    location_enabled: String(_locationEnabled),
     vrm_char_names: JSON.stringify(_vrmCharNames),
     vrm_system_prompts: JSON.stringify(_vrmSystemPrompts),
     selected_vrm_id: _currentVrmId,
@@ -660,6 +711,7 @@ function applySettings(s) {
   llm.applySettings(s);
   speech.applySettings(s);
   if (s.autosave_history !== undefined) _autoSaveEnabled = s.autosave_history === 'true';
+  if (s.location_enabled  !== undefined) _locationEnabled  = s.location_enabled  === 'true';
   if (s.vrm_char_names) {
     try { _vrmCharNames = JSON.parse(s.vrm_char_names); } catch { _vrmCharNames = {}; }
   }
@@ -758,6 +810,7 @@ driveSync.onSignInChange = (isSignedIn) => {
       }
       const prevVrmId = _currentVrmId;
       applySettings(s);
+      _applyLocationIfEnabled();
       driveAutosaveChk.checked = _autoSaveEnabled;
 
       // 設定パネルが開いていれば表示を更新
@@ -820,6 +873,34 @@ driveAutosaveChk.addEventListener('change', () => {
   if (!_autoSaveEnabled) clearTimeout(_autoSaveTimer);
 });
 
+// ---- 位置情報トグル ----
+
+const locationChk    = document.getElementById('location-chk');
+const locationStatus = document.getElementById('location-status');
+
+locationChk.addEventListener('change', async () => {
+  if (locationChk.checked) {
+    locationStatus.textContent = '位置情報を取得中...';
+    const ctx = await fetchLocationContext();
+    if (ctx) {
+      _locationEnabled = true;
+      llm.locationContext = ctx;
+      locationStatus.textContent = `✅ ${ctx}`;
+    } else {
+      // 許可拒否またはエラー
+      _locationEnabled = false;
+      locationChk.checked = false;
+      llm.locationContext = '';
+      locationStatus.textContent = '❌ 取得できませんでした（ブラウザで位置情報の許可が必要です）';
+    }
+  } else {
+    _locationEnabled = false;
+    llm.locationContext = '';
+    locationStatus.textContent = '';
+  }
+  saveSettings();
+});
+
 
 // ---- アプリ初期化 ----
 
@@ -844,6 +925,7 @@ async function initApp() {
   // サインイン状態に応じたバックエンドから設定を読み込む（selected_vrm_id も復元される）
   const saved = await storage.loadSettings().catch(() => null);
   applySettings(saved);
+  _applyLocationIfEnabled();
 
   if (driveSync.isSignedIn) {
     driveAutosaveChk.checked = _autoSaveEnabled;
