@@ -805,6 +805,7 @@ driveSync.onSignInChange = (isSignedIn) => {
       applySettings(s);
       _applyLocationIfEnabled();
       driveAutosaveChk.checked = _autoSaveEnabled;
+      locationChk.checked = _locationEnabled;
 
       // 設定パネルが開いていれば表示を更新
       if (!settingsPanel.classList.contains('hidden')) {
@@ -818,6 +819,8 @@ driveSync.onSignInChange = (isSignedIn) => {
         document.getElementById('setting-aivis-speaker').value     = ss.aivis_speaker_id || '';
         document.getElementById('setting-cloud-api-key').value     = ss.aivis_cloud_api_key || '';
         document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
+        locationStatus.textContent =
+          _locationEnabled && llm.locationContext ? `✅ ${llm.locationContext}` : '';
       }
 
       // Drive から設定を読んだ結果 VRM が変わっていれば読み込む
@@ -918,6 +921,7 @@ async function initApp() {
   const saved = await storage.loadSettings().catch(() => null);
   applySettings(saved);
   _applyLocationIfEnabled();
+  locationChk.checked = _locationEnabled;
 
   if (driveSync.isSignedIn) {
     driveAutosaveChk.checked = _autoSaveEnabled;
