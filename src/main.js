@@ -99,15 +99,9 @@ async function refreshVRMList(selectId = undefined) {
     vrmModelSelect.appendChild(opt);
   }
 
-  // 「モデルを追加」は常に末尾
-  const addOpt = document.createElement('option');
-  addOpt.value = '__add__';
-  addOpt.textContent = '＋ モデルを追加';
-  vrmModelSelect.appendChild(addOpt);
-
   if (selectId !== undefined) {
     vrmModelSelect.value = selectId;
-    if (selectId !== '__add__') _currentVrmId = selectId;
+    _currentVrmId = selectId;
   } else if (_currentVrmId && vrmModelSelect.querySelector(`option[value="${_currentVrmId}"]`)) {
     vrmModelSelect.value = _currentVrmId;
   }
@@ -158,17 +152,14 @@ document.getElementById('vrm-delete-btn').addEventListener('click', async () => 
   }
 });
 
-// change ハンドラ：「モデルを追加」の場合は同期的にピッカーを開く
 vrmModelSelect.addEventListener('change', (e) => {
-  const val = e.target.value;
-  if (val === '__add__') {
-    // ユーザージェスチャーを維持するため同期的に click を呼ぶ
-    vrmModelSelect.value = _currentVrmId;
-    _updateVrmEditRow();
-    vrmFileInput.click();
-    return;
-  }
-  _handleVrmSelect(val);
+  _handleVrmSelect(e.target.value);
+});
+
+// iOS WebKit では <select> の change イベントからファイルピッカーを開けないため
+// 独立したボタンで直接 click() を呼ぶ
+document.getElementById('vrm-add-btn').addEventListener('click', () => {
+  vrmFileInput.click();
 });
 
 function _applyVrmSystemPrompt(vrmId) {
