@@ -72,7 +72,7 @@ class MascotViewProvider {
       `style-src 'unsafe-inline' ${webview.cspSource}`,
       `img-src ${webview.cspSource} data: blob: https:`,
       `font-src ${webview.cspSource}`,
-      `connect-src https: http://localhost:* http://127.0.0.1:*`,
+      `connect-src ${webview.cspSource} https: http://localhost:* http://127.0.0.1:*`,
       `media-src blob:`,
       `worker-src blob:`,
     ].join('; ');

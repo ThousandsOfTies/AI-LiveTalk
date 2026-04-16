@@ -934,8 +934,10 @@ async function initApp() {
     if (isSignedIn) updateUserAvatars();
   };
 
-  // Google Drive セッション復元
-  await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+  // Google Drive セッション復元（VSCode WebView では OAuth が使えないためスキップ）
+  if (!_vscode) {
+    await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+  }
 
   // 実際のコールバックを復元（以降のサインイン/サインアウト操作に対応）
   driveSync.onSignInChange = _postInitCallback;
