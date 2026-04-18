@@ -14,6 +14,7 @@ export class GoogleDriveSync {
     this._email = null;
     this._name = null;
     this._picture = null;
+    this._refreshTimer = null; // 期限前サイレントリフレッシュ用タイマー
     this.onSignInChange = null; // callback(isSignedIn: boolean)
   }
 
@@ -31,10 +32,17 @@ export class GoogleDriveSync {
           console.error('OAuth error:', resp.error);
           return;
         }
+        const wasSignedIn = !!this._token;
         this._token = resp.access_token;
         this._tokenExpiry = Date.now() + TOKEN_LIFETIME_SEC * 1000;
-        await this._fetchAndSaveEmail();
-        this.onSignInChange?.(true);
+        this._scheduleTokenRefresh();
+        if (wasSignedIn) {
+          // トークンリフレッシュ: プロフィールは既に取得済みなのでセッションのみ更新
+          this._saveSession();
+        } else {
+          await this._fetchAndSaveEmail();
+          this.onSignInChange?.(true);
+        }
       },
     });
 
@@ -79,6 +87,7 @@ export class GoogleDriveSync {
     if (token && expiry && Date.now() < expiry) {
       this._token       = token;
       this._tokenExpiry = expiry;
+      this._scheduleTokenRefresh();
       this.onSignInChange?.(true);
       return;
     }
@@ -132,10 +141,12 @@ export class GoogleDriveSync {
   }
 
   signOut() {
+    clearTimeout(this._refreshTimer);
     if (this._token) google.accounts.oauth2.revoke(this._token, () => {});
     this._token       = null;
     this._tokenExpiry = 0;
     this._email       = null;
+    this._name        = null;
     this._picture     = null;
     this._clearSession();
     this.onSignInChange?.(false);
@@ -271,6 +282,19 @@ export class GoogleDriveSync {
   }
 
   // ---- 内部ヘルパー ----
+
+  // トークン期限の1分前にサイレントリフレッシュをスケジュールする。
+  // 成功すればコールバックで新トークンが設定され、このタイマーが再登録される。
+  _scheduleTokenRefresh() {
+    clearTimeout(this._refreshTimer);
+    const msUntilRefresh = this._tokenExpiry - Date.now() - 60_000; // 1分前
+    if (msUntilRefresh <= 0) return; // 既に期限切れ間近はスキップ
+    this._refreshTimer = setTimeout(() => {
+      if (this._email && this._tokenClient) {
+        this._tokenClient.requestAccessToken({ prompt: '', hint: this._email });
+      }
+    }, msUntilRefresh);
+  }
 
   _requireAuth() {
     if (!this._token) throw new Error('Googleにサインインしてください');

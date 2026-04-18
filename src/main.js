@@ -12,7 +12,7 @@ import { AppStorage } from './app-storage.js';
 const canvas = document.getElementById('vrm-canvas');
 const viewer = new VRMViewer(canvas);
 const llm = new LLMClient();
-const speech = new SpeechManager();
+const speech = new SpeechManager(llm);
 const lipSync = new LipSync(viewer);
 const driveSync = new GoogleDriveSync();
 const local   = new LocalStorage();
@@ -42,6 +42,7 @@ let _currentVrmId      = '__builtin__'; // 現在選択中のVRM ID（__builtin_
 let _vrmCharNames      = {};           // { [fileId]: string } 各モデルの表示名
 let _vrmFileNames      = {};           // { [fileId]: string } 各モデルの元ファイル名
 let _vrmSystemPrompts  = {};           // { [fileId]: string } 各モデルのシステムプロンプト
+let _aiAvatarUrl       = null;         // VRMロード後のスナップショット（データURL）
 
 const DEFAULT_VRMA = 'vrma/VRMA_03.vrma';
 
@@ -51,11 +52,27 @@ async function loadDefaultVRMA(isIdle = false) {
   vrmaPresetSelect.value = DEFAULT_VRMA;
 }
 
-/** 現在の設定をストレージに非同期保存（失敗はコンソール警告のみ） */
+/** 現在の設定をストレージに非同期保存（失敗はコンソール警告のみ）。
+ *  短時間に複数回呼ばれた場合はデバウンスして1回にまとめる。 */
+let _saveSettingsTimer = null;
 function saveSettings() {
-  storage.saveSettings(collectSettings()).catch(err =>
-    console.warn('設定保存失敗:', err.message)
-  );
+  clearTimeout(_saveSettingsTimer);
+  _saveSettingsTimer = setTimeout(() => {
+    storage.saveSettings(collectSettings()).catch(err =>
+      console.warn('設定保存失敗:', err.message)
+    );
+  }, 500);
+}
+
+/** VRMキャンバスのスナップショットをAIアバターとして保存 */
+function captureAiAvatar() {
+  requestAnimationFrame(() => {
+    try {
+      _aiAvatarUrl = canvas.toDataURL('image/jpeg', 0.8);
+    } catch (err) {
+      console.warn('AIアバター取得失敗:', err.message);
+    }
+  });
 }
 
 async function refreshVRMList(selectId = undefined) {
@@ -82,15 +99,9 @@ async function refreshVRMList(selectId = undefined) {
     vrmModelSelect.appendChild(opt);
   }
 
-  // 「モデルを追加」は常に末尾
-  const addOpt = document.createElement('option');
-  addOpt.value = '__add__';
-  addOpt.textContent = '＋ モデルを追加';
-  vrmModelSelect.appendChild(addOpt);
-
   if (selectId !== undefined) {
     vrmModelSelect.value = selectId;
-    if (selectId !== '__add__') _currentVrmId = selectId;
+    _currentVrmId = selectId;
   } else if (_currentVrmId && vrmModelSelect.querySelector(`option[value="${_currentVrmId}"]`)) {
     vrmModelSelect.value = _currentVrmId;
   }
@@ -131,9 +142,11 @@ document.getElementById('vrm-delete-btn').addEventListener('click', async () => 
     delete _vrmCharNames[_currentVrmId];
     delete _vrmFileNames[_currentVrmId];
     delete _vrmSystemPrompts[_currentVrmId];
-    _currentVrmId = '__builtin__';
     vrmLoadStatus.textContent = '';
     await refreshVRMList('__builtin__');
+    // リストからの選択と同様にデフォルト VRM をロード
+    _applyVrmSystemPrompt('__builtin__');
+    await loadBuiltinVRM();
     saveSettings();
   } catch (err) {
     vrmLoadStatus.textContent = `❌ ${err.message}`;
@@ -141,17 +154,14 @@ document.getElementById('vrm-delete-btn').addEventListener('click', async () => 
   }
 });
 
-// change ハンドラ：「モデルを追加」の場合は同期的にピッカーを開く
 vrmModelSelect.addEventListener('change', (e) => {
-  const val = e.target.value;
-  if (val === '__add__') {
-    // ユーザージェスチャーを維持するため同期的に click を呼ぶ
-    vrmModelSelect.value = _currentVrmId;
-    _updateVrmEditRow();
-    vrmFileInput.click();
-    return;
-  }
-  _handleVrmSelect(val);
+  _handleVrmSelect(e.target.value);
+});
+
+// iOS WebKit では <select> の change イベントからファイルピッカーを開けないため
+// 独立したボタンで直接 click() を呼ぶ
+document.getElementById('vrm-add-btn').addEventListener('click', () => {
+  vrmFileInput.click();
 });
 
 function _applyVrmSystemPrompt(vrmId) {
@@ -194,6 +204,7 @@ async function _handleVrmSelect(val) {
     } catch (vrmaErr) {
       console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
     }
+    captureAiAvatar();
   } catch (err) {
     vrmLoadStatus.textContent = `❌ ${err.message}`;
     console.error(err);
@@ -211,6 +222,7 @@ async function loadBuiltinVRM() {
     await viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true, isIdle: true });
     vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
     setStatus('');
+    captureAiAvatar();
   } catch (err) {
     setStatus(`モデル読み込みエラー: ${err.message}`);
     console.error(err);
@@ -458,11 +470,11 @@ if (!speech.sttSupported) {
 // 会話モード: TTS終了後に自動でマイクON (長押しでON/OFF)
 let autoListenMode = false;
 
-function startListeningOnce() {
+async function startListeningOnce() {
   speech.setLang(llm.ttsLang);
-  speech.startListening();
+  await speech.startListening();
   micBtn.classList.add('active');
-  setStatus('聞いています...');
+  setStatus(speech.isNoisy ? '✦ 高精度認識中...' : '🎤 聞いています...');
 
   speech.onTranscript = (text) => {
     micBtn.classList.remove('active');
@@ -480,20 +492,22 @@ function startListeningOnce() {
   };
 }
 
-function enterAutoListen() {
+async function enterAutoListen() {
   autoListenMode = true;
   micBtn.classList.add('auto-listen');
   micBtn.title = '会話モード中 (長押しで終了)';
   setStatus('会話モード ON');
   if (!speech.isListening && !chatInput.disabled) {
-    startListeningOnce();
+    await startListeningOnce();
   }
 }
 
 function exitAutoListen() {
   autoListenMode = false;
   micBtn.classList.remove('auto-listen');
-  micBtn.title = '音声入力 (クリックで開始/停止)';
+  micBtn.title = speech.isNoisy
+    ? 'Gemini 音声認識（騒音モード自動切替中）'
+    : '音声入力 (クリックで開始/停止)';
   if (speech.isListening) {
     speech.stopListening();
     micBtn.classList.remove('active');
@@ -514,6 +528,7 @@ micBtn.addEventListener('touchstart', (e) => {
 
 micBtn.addEventListener('pointerdown', () => {
   if (micBtn.disabled) return;
+  speech.startNoiseMonitoring();
   _longPressTriggered = false;
   _longPressTimer = setTimeout(() => {
     _longPressTimer = null;
@@ -541,7 +556,7 @@ micBtn.addEventListener('pointerup', () => {
     setStatus('');
     return;
   }
-  startListeningOnce();
+  startListeningOnce().catch(console.error);
 });
 
 micBtn.addEventListener('pointerleave', () => {
@@ -605,6 +620,10 @@ settingsBtn.addEventListener('click', () => {
     if (driveSync.isSignedIn) {
       document.getElementById('drive-autosave-chk').checked = _autoSaveEnabled;
     }
+    // 位置情報トグルの状態を反映
+    document.getElementById('location-chk').checked = _locationEnabled;
+    document.getElementById('location-status').textContent =
+      _locationEnabled && llm.locationContext ? `✅ ${llm.locationContext}` : '';
   }
 });
 
@@ -709,6 +728,52 @@ let _savedArmCorr = 0;
 let _savedShCorr = 0;
 let _savedChCorr = 0;
 
+// ---- 位置情報 ----
+
+let _locationEnabled = false;
+
+/**
+ * Nominatim (OpenStreetMap) で逆ジオコーディングして位置情報文字列を返す。
+ * 取得できなかった場合は null を返す。
+ */
+function fetchLocationContext() {
+  if (!navigator.geolocation) return null;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json&accept-language=ja`,
+            { headers: { 'User-Agent': 'VRLLM/1.0' } }
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+          const city    = addr.city || addr.town || addr.village || addr.hamlet || '';
+          const state   = addr.state || '';
+          const country = addr.country || '';
+          const place   = [city, state, country].filter(Boolean).join('、');
+          const now     = new Date();
+          const timeStr = now.toLocaleString('ja-JP', {
+            month: 'long', day: 'numeric', weekday: 'short',
+            hour: '2-digit', minute: '2-digit',
+          });
+          resolve(`現在地: ${place}。現地日時: ${timeStr}。`);
+        } catch { resolve(null); }
+      },
+      () => resolve(null),
+      { timeout: 10_000 }
+    );
+  });
+}
+
+/** 設定で有効になっていればバックグラウンドで位置情報を取得して llm.locationContext にセットする */
+function _applyLocationIfEnabled() {
+  if (!_locationEnabled) return;
+  fetchLocationContext().then(ctx => {
+    if (ctx) llm.locationContext = ctx;
+  });
+}
+
 // ---- 設定ヘルパー ----
 
 function collectSettings() {
@@ -716,6 +781,7 @@ function collectSettings() {
     ...llm.getSettings(),
     ...speech.getSettings(),
     autosave_history: String(_autoSaveEnabled),
+    location_enabled: String(_locationEnabled),
     vrm_char_names: JSON.stringify(_vrmCharNames),
     vrm_system_prompts: JSON.stringify(_vrmSystemPrompts),
     selected_vrm_id: _currentVrmId,
@@ -730,6 +796,7 @@ function applySettings(s) {
   llm.applySettings(s);
   speech.applySettings(s);
   if (s.autosave_history !== undefined) _autoSaveEnabled = s.autosave_history === 'true';
+  if (s.location_enabled  !== undefined) _locationEnabled  = s.location_enabled  === 'true';
   if (s.vrm_char_names) {
     try { _vrmCharNames = JSON.parse(s.vrm_char_names); } catch { _vrmCharNames = {}; }
   }
@@ -757,8 +824,7 @@ function scheduleHistorySave() {
   _autoSaveTimer = setTimeout(async () => {
     try {
       await storage.saveHistory(llm.history);
-      setStatus('履歴を自動保存しました');
-      setTimeout(() => { if (statusEl.textContent === '履歴を自動保存しました') setStatus(''); }, 3000);
+      setStatusTemp(statusEl, '履歴を自動保存しました');
     } catch (err) {
       console.warn('履歴自動保存失敗:', err.message);
     }
@@ -831,6 +897,7 @@ function updateDriveSyncUI(isSignedIn) {
 driveSync.onSignInChange = (isSignedIn) => {
   updateDriveSyncUI(isSignedIn);
   if (isSignedIn) {
+    updateUserAvatars();
     driveStatus.textContent = '読み込み中...';
     storage.loadSettings().then(async s => {
       if (!s) {
@@ -839,7 +906,9 @@ driveSync.onSignInChange = (isSignedIn) => {
       }
       const prevVrmId = _currentVrmId;
       applySettings(s);
+      _applyLocationIfEnabled();
       driveAutosaveChk.checked = _autoSaveEnabled;
+      locationChk.checked = _locationEnabled;
 
       // 設定パネルが開いていれば表示を更新
       if (!settingsPanel.classList.contains('hidden')) {
@@ -853,6 +922,8 @@ driveSync.onSignInChange = (isSignedIn) => {
         document.getElementById('setting-aivis-speaker').value     = ss.aivis_speaker_id || '';
         document.getElementById('setting-cloud-api-key').value     = ss.aivis_cloud_api_key || '';
         document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
+        locationStatus.textContent =
+          _locationEnabled && llm.locationContext ? `✅ ${llm.locationContext}` : '';
       }
 
       // プロファイル（長期記憶）のロード
@@ -869,19 +940,21 @@ driveSync.onSignInChange = (isSignedIn) => {
       // Drive から設定を読んだ結果 VRM が変わっていれば読み込む
       if (_currentVrmId !== prevVrmId && _currentVrmId !== '__builtin__') {
         try {
-          const buf = await storage.downloadVRM(_currentVrmId);
+          // _vrmFileNames を最新化してからダウンロード（ファイル名が空だと壊れるため）
+          await refreshVRMList(_currentVrmId);
           const fname = _vrmFileNames[_currentVrmId] || _currentVrmId;
+          const buf = await storage.downloadVRM(_currentVrmId);
           const file = new File([buf], fname, { type: 'application/octet-stream' });
           await viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
           await loadDefaultVRMA(true);
           setStatus('');
+          captureAiAvatar();
         } catch (err) {
           console.warn('Drive サインイン後の VRM 読み込み失敗:', err.message);
         }
       }
 
-      driveStatus.textContent = '✅ Drive から設定を読み込みました';
-      setTimeout(() => { if (driveStatus.textContent.includes('読み込みました')) driveStatus.textContent = ''; }, 3000);
+      setStatusTemp(driveStatus, '✅ Drive から設定を読み込みました');
     }).catch(err => {
       driveStatus.textContent = `❌ 設定の読み込みに失敗しました: ${err.message}`;
     });
@@ -915,6 +988,34 @@ driveAutosaveChk.addEventListener('change', () => {
   if (!_autoSaveEnabled) clearTimeout(_autoSaveTimer);
 });
 
+// ---- 位置情報トグル ----
+
+const locationChk    = document.getElementById('location-chk');
+const locationStatus = document.getElementById('location-status');
+
+locationChk.addEventListener('change', async () => {
+  if (locationChk.checked) {
+    locationStatus.textContent = '位置情報を取得中...';
+    const ctx = await fetchLocationContext();
+    if (ctx) {
+      _locationEnabled = true;
+      llm.locationContext = ctx;
+      locationStatus.textContent = `✅ ${ctx}`;
+    } else {
+      // 許可拒否またはエラー
+      _locationEnabled = false;
+      locationChk.checked = false;
+      llm.locationContext = '';
+      locationStatus.textContent = '❌ 取得できませんでした（ブラウザで位置情報の許可が必要です）';
+    }
+  } else {
+    _locationEnabled = false;
+    llm.locationContext = '';
+    locationStatus.textContent = '';
+  }
+  saveSettings();
+});
+
 
 // ---- アプリ初期化 ----
 
@@ -922,8 +1023,19 @@ async function initApp() {
   // IndexedDB を開く
   await local.init();
 
-  // Google Drive セッション復元（完了後に onSignInChange が発火する場合がある）
+  // Drive 初期化中に onSignInChange が発火しても UI のみ更新し、
+  // 設定読み込みは initApp 側で一元管理する（二重読み込みの競合を防ぐ）
+  const _postInitCallback = driveSync.onSignInChange;
+  driveSync.onSignInChange = (isSignedIn) => {
+    updateDriveSyncUI(isSignedIn);
+    if (isSignedIn) updateUserAvatars();
+  };
+
+  // Google Drive セッション復元
   await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+
+  // 実際のコールバックを復元（以降のサインイン/サインアウト操作に対応）
+  driveSync.onSignInChange = _postInitCallback;
 
   // サイレント復元が（ブラウザ制限等で）失敗し、かつ過去のアカウント情報がある場合は
   // ユーザーの明示的なクリック（ユーザージェスチャー）でログインを再開させるトーストを表示
@@ -934,6 +1046,17 @@ async function initApp() {
   // サインイン状態に応じたバックエンドから設定を読み込む（selected_vrm_id も復元される）
   const saved = await storage.loadSettings().catch(() => null);
   applySettings(saved);
+  _applyLocationIfEnabled();
+  locationChk.checked = _locationEnabled;
+
+  if (driveSync.isSignedIn) {
+    driveAutosaveChk.checked = _autoSaveEnabled;
+    if (saved) {
+      setStatusTemp(driveStatus, '✅ Drive から設定を読み込みました');
+    } else {
+      driveStatus.textContent = '⚠️ Drive に設定がまだ保存されていません';
+    }
+  }
 
   // 前回選択していたモデルを起動時にロード
   if (_currentVrmId === '__builtin__') {
@@ -955,6 +1078,7 @@ async function initApp() {
       setStatus('デフォルトモーション適用中...');
       await loadDefaultVRMA(true);
       setStatus('');
+      captureAiAvatar();
     } catch (err) {
       console.warn('前回のモデル読み込み失敗、ビルトインに戻します:', err.message);
       _currentVrmId = '__builtin__';
@@ -1031,6 +1155,10 @@ async function acquireWakeLock() {
   if (_wakeLock?.released === false) return; // 既に有効
   try {
     _wakeLock = await navigator.wakeLock.request('screen');
+    // ブラウザが自動解除したときにページが表示中なら即再取得
+    _wakeLock.addEventListener('release', () => {
+      if (document.visibilityState === 'visible') acquireWakeLock();
+    }, { once: true });
   } catch (err) {
     console.warn('Wake Lock 取得失敗:', err.message);
   }
@@ -1042,6 +1170,15 @@ document.addEventListener('pointerdown', acquireWakeLock, { once: true });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') acquireWakeLock();
 });
+
+// ノイズレベル変化時にマイクボタンのアイコン・スタイルを更新
+speech.onNoiseModeChange = (isNoisy) => {
+  micBtn.classList.toggle('noisy-mode', isNoisy);
+  micBtn.textContent = isNoisy ? '✦' : '🎤';
+  micBtn.title = isNoisy
+    ? 'Gemini 音声認識（騒音モード自動切替中）'
+    : '音声入力 (クリックで開始/停止)';
+};
 
 // ---- PWA: Service Worker 登録 ----
 if ('serviceWorker' in navigator) {
@@ -1090,7 +1227,7 @@ function appendMessage(role, text, force = false) {
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
   wrap.innerHTML = `
-    <div class="message-avatar">${role === 'user' ? '👤' : '🤖'}</div>
+    <div class="message-avatar">${getAvatarHtml(role)}</div>
     <div class="message-bubble">
       <div class="message-text">${escapeHtml(text)}</div>
     </div>
@@ -1098,6 +1235,22 @@ function appendMessage(role, text, force = false) {
   chatMessages.appendChild(wrap);
   scrollToBottom(force);
   return wrap;
+}
+
+function getAvatarHtml(role) {
+  if (role === 'user') {
+    const pic = driveSync.picture;
+    return pic ? `<img src="${pic}" class="avatar-img" alt="user">` : '👤';
+  }
+  return _aiAvatarUrl ? `<img src="${_aiAvatarUrl}" class="avatar-img" alt="AI">` : '🤖';
+}
+
+/** Googleサインイン時などに既存のユーザーアイコンをまとめて更新 */
+function updateUserAvatars() {
+  const pic = driveSync.picture;
+  const html = pic ? `<img src="${pic}" class="avatar-img" alt="user">` : '👤';
+  chatMessages.querySelectorAll('.message.user .message-avatar')
+    .forEach(el => { el.innerHTML = html; });
 }
 
 function escapeHtml(str) {
@@ -1123,6 +1276,11 @@ function scrollToBottom(force = false) {
 
 function setStatus(text) {
   statusEl.textContent = text;
+}
+
+function setStatusTemp(el, text, ms = 3000) {
+  el.textContent = text;
+  setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, ms);
 }
 
 function setInputEnabled(enabled) {

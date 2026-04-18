@@ -33,6 +33,8 @@ export class LLMClient {
     this.ttsLang = DEFAULTS.ttsLang;
     this.history = [];
     this.userProfile = [];
+    /** 位置情報コンテキスト（空文字の場合は使用しない） */
+    this.locationContext = '';
 
     /** 感情検出時に呼ばれるコールバック @type {function(string):void} */
     this.onEmotionDetected = null;
@@ -79,7 +81,7 @@ export class LLMClient {
     const body = {
       model: this.model,
       messages: [
-        { role: 'system', content: this.systemPrompt + profileContext + EMOTION_INSTRUCTION },
+        { role: 'system', content: this.systemPrompt + (this.locationContext ? '\n\n' + this.locationContext : '') + profileContext + EMOTION_INSTRUCTION },
         ...this.history, // リミッターを解除し全履歴を送信（超大容量コンテキストを活用）
       ],
       stream: true,

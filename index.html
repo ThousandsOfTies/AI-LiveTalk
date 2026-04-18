@@ -17,8 +17,9 @@
     <!-- VRM ビューワー -->
     <div id="viewer-panel">
       <canvas id="vrm-canvas"></canvas>
-      <input type="file" id="vrm-file-input" accept=".vrm" hidden>
-      <input type="file" id="vrma-file-input" accept=".vrma" hidden>
+      <!-- iOS WebKit は display:none な file input への programmatic click を無視するため CSS で非表示にする -->
+      <input type="file" id="vrm-file-input" accept=".vrm" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
+      <input type="file" id="vrma-file-input" accept=".vrma" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
       <div id="viewer-controls">
         <button id="load-vrma-btn" title="VRMAアニメーションを読み込んで再生">🎬 VRMA</button>
         <select id="vrma-preset-select" title="モーションを選択">
@@ -89,9 +90,10 @@
           <label>
             VRMモデル
             <select id="vrm-model-select">
-              <option value="__add__">＋ モデルを追加</option>
+              <option value="__builtin__">リリム (デフォルト)</option>
             </select>
           </label>
+          <button type="button" id="vrm-add-btn">＋ モデルを追加</button>
           <div id="vrm-edit-row" class="hidden">
             <label>
               キャラ名
@@ -129,7 +131,7 @@
           </label>
           <label>
             システムプロンプト
-            <textarea id="setting-system-prompt" rows="6"></textarea>
+            <textarea id="setting-system-prompt" rows="6" autocomplete="off"></textarea>
           </label>
         </div>
 
@@ -149,6 +151,12 @@
             モデル名
             <input type="text" id="setting-model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
           </label>
+          <label class="drive-toggle-label">
+            <input type="checkbox" id="location-chk">
+            <span class="drive-toggle-track"><span class="drive-toggle-thumb"></span></span>
+            <span>位置情報をLLMに渡す</span>
+          </label>
+          <span id="location-status" class="hint"></span>
         </div>
 
         <!-- 音声タブ -->
@@ -170,7 +178,7 @@
             AivisSpeech 話者ID
             <span class="hint">話者IDは AivisSpeech の画面で確認できます</span>
             <div style="display:flex;gap:8px;align-items:center">
-              <input type="number" id="setting-aivis-speaker" placeholder="888753760" style="flex:1">
+              <input type="number" id="setting-aivis-speaker" placeholder="888753760" style="flex:1" autocomplete="off">
               <button type="button" id="aivis-check-btn">疎通確認</button>
             </div>
             <span id="aivis-status" class="hint"></span>
