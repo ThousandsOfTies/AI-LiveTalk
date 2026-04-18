@@ -308,6 +308,35 @@ llm.onEmotionDetected = (emotion) => {
   setStatus(`感情: ${emotion}`);
 };
 
+// プロファイル（メモ）コールバックを事前に登録
+let _autoSaveProfileTimer = null;
+llm.onMemoDetected = (memo) => {
+  console.log("🕵️‍♂️ プロファイル追加: ", memo);
+  if (!llm.userProfile) llm.userProfile = [];
+  
+  // 重複チェックは簡易的に行う（文字列完全一致）
+  if (!llm.userProfile.includes(memo)) {
+    llm.userProfile.push(memo);
+    // 古いメモを押し出し、最大20件に維持
+    if (llm.userProfile.length > 20) {
+      llm.userProfile.shift();
+    }
+  }
+
+  // Google Driveへの同期保存
+  if (driveSync.isSignedIn) {
+    clearTimeout(_autoSaveProfileTimer);
+    _autoSaveProfileTimer = setTimeout(async () => {
+      try {
+        await driveSync.saveUserProfile(llm.userProfile);
+        console.log("✅ UserProfileをGoogle Driveに同期しました。");
+      } catch (err) {
+        console.warn('プロファイル保存失敗:', err.message);
+      }
+    }, 5000);
+  }
+};
+
 // 実行中のパイプライン（割り込み停止用）
 let _activePipeline = null;
 
@@ -557,6 +586,19 @@ settingsBtn.addEventListener('click', () => {
                    speech._useAivis ? '✅ ローカル AivisSpeech 使用中' : '❌ ブラウザTTS使用中';
     document.getElementById('aivis-status').textContent = ttsMode;
 
+    // VRMA 補正角
+    document.getElementById('setting-arm-correction').value     = _savedArmCorr;
+    document.getElementById('setting-arm-correction-num').value = _savedArmCorr;
+    viewer.setVRMArmCorrection(_savedArmCorr);
+
+    document.getElementById('setting-shoulder-correction').value     = _savedShCorr;
+    document.getElementById('setting-shoulder-correction-num').value = _savedShCorr;
+    viewer.setVRMAShoulderCorrection(_savedShCorr);
+
+    document.getElementById('setting-chest-correction').value     = _savedChCorr;
+    document.getElementById('setting-chest-correction-num').value = _savedChCorr;
+    viewer.setVRMAChestCorrection(_savedChCorr);
+
     // VRMリストを更新
     refreshVRMList();
     // Drive サインイン済みなら自動保存チェックを更新
@@ -573,6 +615,13 @@ saveSettingsBtn.addEventListener('click', () => {
   llm.systemPrompt = document.getElementById('setting-system-prompt').value.trim();
   _vrmSystemPrompts[_currentVrmId] = llm.systemPrompt;
   llm.ttsLang      = document.getElementById('setting-tts-lang').value;
+
+  _savedArmCorr = parseFloat(document.getElementById('setting-arm-correction-num').value) || 0;
+  viewer.setVRMArmCorrection(_savedArmCorr);
+  _savedShCorr = parseFloat(document.getElementById('setting-shoulder-correction-num').value) || 0;
+  viewer.setVRMAShoulderCorrection(_savedShCorr);
+  _savedChCorr = parseFloat(document.getElementById('setting-chest-correction-num').value) || 0;
+  viewer.setVRMAChestCorrection(_savedChCorr);
 
   speech.updateAivisSettings(
     document.getElementById('setting-aivis-url').value.trim(),
@@ -605,6 +654,41 @@ document.getElementById('aivis-check-btn').addEventListener('click', async () =>
 
 cancelSettingsBtn.addEventListener('click', () => {
   settingsPanel.classList.add('hidden');
+  // キャンセル時は元の値に戻してリアルタイムプレビューを破棄する
+  viewer.setVRMArmCorrection(_savedArmCorr);
+  viewer.setVRMAShoulderCorrection(_savedShCorr);
+  viewer.setVRMAChestCorrection(_savedChCorr);
+});
+
+// ---- 腕補正角スライダー ↔ 数値入力の連動 ----
+document.getElementById('setting-arm-correction').addEventListener('input', (e) => {
+  document.getElementById('setting-arm-correction-num').value = e.target.value;
+  viewer.setVRMArmCorrection(parseFloat(e.target.value) || 0);
+});
+document.getElementById('setting-arm-correction-num').addEventListener('input', (e) => {
+  const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
+  document.getElementById('setting-arm-correction').value = v;
+  viewer.setVRMArmCorrection(v);
+});
+
+document.getElementById('setting-shoulder-correction').addEventListener('input', (e) => {
+  document.getElementById('setting-shoulder-correction-num').value = e.target.value;
+  viewer.setVRMAShoulderCorrection(parseFloat(e.target.value) || 0);
+});
+document.getElementById('setting-shoulder-correction-num').addEventListener('input', (e) => {
+  const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
+  document.getElementById('setting-shoulder-correction').value = v;
+  viewer.setVRMAShoulderCorrection(v);
+});
+
+document.getElementById('setting-chest-correction').addEventListener('input', (e) => {
+  document.getElementById('setting-chest-correction-num').value = e.target.value;
+  viewer.setVRMAChestCorrection(parseFloat(e.target.value) || 0);
+});
+document.getElementById('setting-chest-correction-num').addEventListener('input', (e) => {
+  const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
+  document.getElementById('setting-chest-correction').value = v;
+  viewer.setVRMAChestCorrection(v);
 });
 
 clearHistoryBtn.addEventListener('click', () => {
@@ -621,6 +705,10 @@ clearHistoryBtn.addEventListener('click', () => {
 let _autoSaveEnabled = false;
 let _autoSaveTimer   = null;
 
+let _savedArmCorr = 0;
+let _savedShCorr = 0;
+let _savedChCorr = 0;
+
 // ---- 設定ヘルパー ----
 
 function collectSettings() {
@@ -631,6 +719,9 @@ function collectSettings() {
     vrm_char_names: JSON.stringify(_vrmCharNames),
     vrm_system_prompts: JSON.stringify(_vrmSystemPrompts),
     selected_vrm_id: _currentVrmId,
+    vrma_arm_correction: String(_savedArmCorr),
+    vrma_shoulder_correction: String(_savedShCorr),
+    vrma_chest_correction: String(_savedChCorr),
   };
 }
 
@@ -646,6 +737,18 @@ function applySettings(s) {
     try { _vrmSystemPrompts = JSON.parse(s.vrm_system_prompts); } catch { _vrmSystemPrompts = {}; }
   }
   if (s.selected_vrm_id) _currentVrmId = s.selected_vrm_id;
+  if (s.vrma_arm_correction !== undefined) {
+    _savedArmCorr = parseFloat(s.vrma_arm_correction) || 0;
+    viewer.setVRMArmCorrection(_savedArmCorr);
+  }
+  if (s.vrma_shoulder_correction !== undefined) {
+    _savedShCorr = parseFloat(s.vrma_shoulder_correction) || 0;
+    viewer.setVRMAShoulderCorrection(_savedShCorr);
+  }
+  if (s.vrma_chest_correction !== undefined) {
+    _savedChCorr = parseFloat(s.vrma_chest_correction) || 0;
+    viewer.setVRMAChestCorrection(_savedChCorr);
+  }
 }
 
 function scheduleHistorySave() {
@@ -752,6 +855,17 @@ driveSync.onSignInChange = (isSignedIn) => {
         document.getElementById('setting-cloud-model-uuid').value  = ss.aivis_cloud_model_uuid || '';
       }
 
+      // プロファイル（長期記憶）のロード
+      try {
+        const profileInfo = await driveSync.loadUserProfile();
+        if (profileInfo && Array.isArray(profileInfo)) {
+          llm.userProfile = profileInfo;
+          console.log("✅ Google Driveから長期記憶（プロファイル）を読み込みました:", profileInfo);
+        }
+      } catch (err) {
+        console.warn('プロファイル読み込み失敗:', err.message);
+      }
+
       // Drive から設定を読んだ結果 VRM が変わっていれば読み込む
       if (_currentVrmId !== prevVrmId && _currentVrmId !== '__builtin__') {
         try {
@@ -771,6 +885,12 @@ driveSync.onSignInChange = (isSignedIn) => {
     }).catch(err => {
       driveStatus.textContent = `❌ 設定の読み込みに失敗しました: ${err.message}`;
     });
+  }
+
+  // もし再ログイン用トーストが出ていれば消す
+  const existingToast = document.getElementById('reauth-toast');
+  if (isSignedIn && existingToast) {
+    existingToast.remove();
   }
 };
 
@@ -804,6 +924,12 @@ async function initApp() {
 
   // Google Drive セッション復元（完了後に onSignInChange が発火する場合がある）
   await driveSync.init().catch(err => console.warn('Drive sync init:', err));
+
+  // サイレント復元が（ブラウザ制限等で）失敗し、かつ過去のアカウント情報がある場合は
+  // ユーザーの明示的なクリック（ユーザージェスチャー）でログインを再開させるトーストを表示
+  if (!driveSync.isSignedIn && driveSync.email) {
+    showReauthToast(driveSync.email);
+  }
 
   // サインイン状態に応じたバックエンドから設定を読み込む（selected_vrm_id も復元される）
   const saved = await storage.loadSettings().catch(() => null);
@@ -841,6 +967,60 @@ async function initApp() {
 }
 
 initApp().catch(err => console.warn('App init error:', err));
+
+function showReauthToast(email) {
+  if (document.getElementById('reauth-toast')) return;
+  const toast = document.createElement('div');
+  toast.id = 'reauth-toast';
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.background = 'rgba(0, 0, 0, 0.85)';
+  toast.style.color = '#fff';
+  toast.style.padding = '12px 20px';
+  toast.style.borderRadius = '8px';
+  toast.style.zIndex = '9999';
+  toast.style.display = 'flex';
+  toast.style.alignItems = 'center';
+  toast.style.gap = '15px';
+  toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+  toast.style.fontSize = '14px';
+
+  const text = document.createElement('span');
+  text.textContent = `Drive同期 (${email}) を再開しますか？`;
+
+  const btn = document.createElement('button');
+  btn.textContent = 'はい';
+  btn.style.padding = '6px 16px';
+  btn.style.borderRadius = '20px';
+  btn.style.border = 'none';
+  btn.style.background = '#4CAF50';
+  btn.style.color = '#fff';
+  btn.style.fontWeight = 'bold';
+  btn.style.cursor = 'pointer';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.background = 'none';
+  closeBtn.style.border = 'none';
+  closeBtn.style.color = '#bbb';
+  closeBtn.style.cursor = 'pointer';
+  closeBtn.style.fontSize = '16px';
+  closeBtn.style.padding = '0 4px';
+
+  btn.addEventListener('click', () => {
+    try { driveSync.signIn(); } catch (e) { console.error(e); }
+    toast.remove();
+  });
+  
+  closeBtn.addEventListener('click', () => toast.remove());
+
+  toast.appendChild(text);
+  toast.appendChild(btn);
+  toast.appendChild(closeBtn);
+  document.body.appendChild(toast);
+}
 
 // ---- スクリーンロック防止 (Wake Lock API) ----
 // モバイルブラウザはユーザー操作後でないと取得できないため、

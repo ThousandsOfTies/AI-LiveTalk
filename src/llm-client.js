@@ -8,12 +8,16 @@ const EMOTION_INSTRUCTION = `
 感情名は happy / sad / angry / surprised / relaxed / neutral のいずれか。
 例: [EMO:happy]はい、その通りです！ほかにご質問はありますか？
 例: [EMO:sad]それは残念でしたね。何かお力になれることはありますか？
-感情タグは先頭の1回だけ。返答本文の中には入れないでください。`;
+感情タグは先頭の1回だけ。返答本文の中には入れないでください。
+
+【プロファイラーとしての裏タスク】
+あなたはユーザーのプロファイラーでもあります。会話から、ユーザーの一般人とは違うユニークな特徴、価値観、行動パターンを新たに発見した場合のみ、感情タグの直後に [MEMO:〇〇] というタグを出力して秘密裏に記録してください。
+例: [EMO:surprised][MEMO:休日は必ず山に登るほどのアウトドア派]そうなんですね！山登りお好きなんですね！`;
 
 const DEFAULTS = {
-  endpoint: 'https://api.openai.com/v1',
+  endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/',
   apiKey: '',
-  model: 'gpt-4o-mini',
+  model: 'gemini-2.5-flash',
   systemPrompt: `あなたの名前はリリムです。あなたは私の親しい友達です。タメ口で、フレンドリーにおしゃべりしてください。
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,
@@ -28,9 +32,12 @@ export class LLMClient {
     this.systemPrompt = DEFAULTS.systemPrompt;
     this.ttsLang = DEFAULTS.ttsLang;
     this.history = [];
+    this.userProfile = [];
 
     /** 感情検出時に呼ばれるコールバック @type {function(string):void} */
     this.onEmotionDetected = null;
+    /** メモ(プロファイル)検出時に呼ばれるコールバック @type {function(string):void} */
+    this.onMemoDetected = null;
   }
 
   /** 設定を一括適用する */
@@ -65,11 +72,15 @@ export class LLMClient {
   async *chat(userMessage) {
     this.history.push({ role: 'user', content: userMessage });
 
+    const profileContext = this.userProfile && this.userProfile.length > 0 
+      ? `\n\n【これまでの分析で判明しているユーザーの特徴】\n- ` + this.userProfile.join(`\n- `)
+      : '';
+
     const body = {
       model: this.model,
       messages: [
-        { role: 'system', content: this.systemPrompt + EMOTION_INSTRUCTION },
-        ...this.history.slice(-20),
+        { role: 'system', content: this.systemPrompt + profileContext + EMOTION_INSTRUCTION },
+        ...this.history, // リミッターを解除し全履歴を送信（超大容量コンテキストを活用）
       ],
       stream: true,
     };
@@ -129,6 +140,10 @@ export class LLMClient {
               let m;
               while ((m = prefixBuf.match(/\[EMO:([^\]]+)\]\s*/))) {
                 this.onEmotionDetected?.(m[1].trim().toLowerCase());
+                prefixBuf = prefixBuf.replace(m[0], '');
+              }
+              while ((m = prefixBuf.match(/\[MEMO:([^\]]+)\]\s*/))) {
+                this.onMemoDetected?.(m[1].trim());
                 prefixBuf = prefixBuf.replace(m[0], '');
               }
               // まだ開始ブラケットがある、またはバッファが空（次の文字待ち）の場合は処理を保留

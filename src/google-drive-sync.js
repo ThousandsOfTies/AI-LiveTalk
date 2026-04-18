@@ -70,13 +70,15 @@ export class GoogleDriveSync {
 
     const { token, expiry, email, name, picture } = saved;
 
+    // アカウント情報はトークン期限切れでも後続のsignIn()のヒントとして活用するため復元
+    this._email       = email   ?? null;
+    this._name        = name    ?? null;
+    this._picture     = picture ?? null;
+
     // トークンがまだ有効期限内の場合はそのまま復元
     if (token && expiry && Date.now() < expiry) {
       this._token       = token;
       this._tokenExpiry = expiry;
-      this._email       = email   ?? null;
-      this._name        = name    ?? null;
-      this._picture     = picture ?? null;
       this.onSignInChange?.(true);
       return;
     }
@@ -219,6 +221,30 @@ export class GoogleDriveSync {
     const res = await this._fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`履歴読み込み失敗 (${res.status})`);
     return res.json(); // { messages, savedAt }
+  }
+
+  // ---- ユーザープロファイル（長期記憶） ----
+
+  async saveUserProfile(profileArray) {
+    this._requireAuth();
+    const data = { profile: profileArray, savedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const fileId = await this._findFile('vrllm-profile.json', 'appDataFolder');
+    if (fileId) {
+      await this._patchMedia(fileId, blob);
+    } else {
+      await this._multipartCreate('vrllm-profile.json', blob, ['appDataFolder']);
+    }
+  }
+
+  async loadUserProfile() {
+    this._requireAuth();
+    const fileId = await this._findFile('vrllm-profile.json', 'appDataFolder');
+    if (!fileId) return []; // ファイルがなければ空配列
+    const res = await this._fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    if (!res.ok) throw new Error(`プロファイル読み込み失敗 (${res.status})`);
+    const data = await res.json();
+    return data.profile || [];
   }
 
   // ---- キャラクタープリセット ----
@@ -378,7 +404,8 @@ export class GoogleDriveSync {
     if (res.status === 401) {
       this._token = null;
       this._tokenExpiry = 0;
-      this._clearSession();
+      // トークン情報のみ消去し、メールなどのアカウント情報は維持して再認証のヒントにする
+      this._saveSession();
       this.onSignInChange?.(false);
       throw new Error('認証の有効期限が切れました。再度サインインしてください');
     }

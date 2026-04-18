@@ -23,6 +23,11 @@ export class VRMViewer {
     // アイドル VRMA パス（感情モーション終了後に戻る）
     this._idleVrmaUrl = null;
 
+    // VRMA 補正角 (ラジアン)
+    this._vrmaArmCorrectionRad = 0;
+    this._vrmaShoulderCorrectionRad = 0;
+    this._vrmaChestCorrectionRad = 0;
+
     // アイドルアニメーション用
     this._blinkTimer = 0;
     this._blinkInterval = 3 + Math.random() * 3;
@@ -233,6 +238,56 @@ export class VRMViewer {
     }
   }
 
+  /**
+   * VRMA 補正角を設定する（度単位）
+   */
+  setVRMArmCorrection(degrees)      { this._vrmaArmCorrectionRad = (degrees * Math.PI) / 180; }
+  setVRMAShoulderCorrection(degrees) { this._vrmaShoulderCorrectionRad = (degrees * Math.PI) / 180; }
+  setVRMAChestCorrection(degrees)    { this._vrmaChestCorrectionRad = (degrees * Math.PI) / 180; }
+
+  /**
+   * ミキサーやアイドルモーションの後、vrm.update の直前にリアルタイムで補正角を掛ける
+   * これによりスライダーを動かした瞬間に即座に反映される
+   */
+  _applyRealtimePoseCorrection() {
+    if (!this.vrm?.humanoid) return;
+    const armRad      = this._vrmaArmCorrectionRad;
+    const shoulderRad = this._vrmaShoulderCorrectionRad;
+    const chestRad    = this._vrmaChestCorrectionRad;
+    if (!armRad && !shoulderRad && !chestRad) return;
+
+    const h = this.vrm.humanoid;
+    const nodes = {
+      leftUpperArm:  h.getNormalizedBoneNode('leftUpperArm'),
+      rightUpperArm: h.getNormalizedBoneNode('rightUpperArm'),
+      leftShoulder:  h.getNormalizedBoneNode('leftShoulder'),
+      rightShoulder: h.getNormalizedBoneNode('rightShoulder'),
+      chest:         h.getNormalizedBoneNode('chest') || h.getNormalizedBoneNode('upperChest'),
+    };
+
+    // テンポラリオブジェクトを使い回す
+    if (!this._qArmL) {
+      this._qArmL = new THREE.Quaternion();
+      this._qArmR = new THREE.Quaternion();
+      this._qShL  = new THREE.Quaternion();
+      this._qShR  = new THREE.Quaternion();
+      this._qCh   = new THREE.Quaternion();
+    }
+
+    this._qArmL.setFromEuler(new THREE.Euler(0, 0,  armRad));
+    this._qArmR.setFromEuler(new THREE.Euler(0, 0, -armRad));
+    this._qShL.setFromEuler(new THREE.Euler(0,  shoulderRad, 0));
+    this._qShR.setFromEuler(new THREE.Euler(0, -shoulderRad, 0));
+    this._qCh.setFromEuler(new THREE.Euler(chestRad, 0, 0));
+
+    // アニメーション適用後に、さらに各ボーンのローカル座標系で追加の回転を加える
+    if (nodes.leftUpperArm)  nodes.leftUpperArm.quaternion.premultiply(this._qArmL);
+    if (nodes.rightUpperArm) nodes.rightUpperArm.quaternion.premultiply(this._qArmR);
+    if (nodes.leftShoulder)  nodes.leftShoulder.quaternion.premultiply(this._qShL);
+    if (nodes.rightShoulder) nodes.rightShoulder.quaternion.premultiply(this._qShR);
+    if (nodes.chest)         nodes.chest.quaternion.premultiply(this._qCh);
+  }
+
   /** VRMAアニメーションを停止してアイドルモーションに戻す */
   stopVRMA() {
     if (this._mixer) {
@@ -384,6 +439,10 @@ export class VRMViewer {
       this._updateBlinking(delta);
       if (!this._vrmaPlaying) this._updateIdleMotion(elapsed);
       if (this._mixer) this._mixer.update(delta);
+      
+      // アニメーションミキサー適用後のリアルタイム姿勢補正
+      this._applyRealtimePoseCorrection();
+      
       this.vrm.update(delta);
     }
 

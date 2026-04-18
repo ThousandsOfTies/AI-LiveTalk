@@ -311,6 +311,7 @@ body {
 }
 #settings-inner textarea { resize: vertical; }
 #settings-inner select { cursor: pointer; }
+.setting-row { display: flex; gap: 8px; align-items: center; }
 
 .settings-actions {
   display: flex;
@@ -612,6 +613,26 @@ body {
   text-decoration: underline;
 }
 .drive-signout:hover { color: #888 !important; }
+
+/* ---- ヘルプタブ ---- */
+.help-content {
+  color: #e0e0f0;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 4px;
+}
+.help-content h3 {
+  font-size: 14px;
+  color: #b8b0ff;
+  margin-top: 16px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #2a2a48;
+  padding-bottom: 4px;
+}
+.help-content h3:first-child { margin-top: 0; }
+.help-content p { margin-bottom: 10px; color: #ccc; }
+.help-content b { color: #fff; font-weight: 600; }
+.help-content code { background: #191930; padding: 2px 4px; border-radius: 4px; color: #8f8ff5; }
 
 /* ---- ユーティリティ ---- */
 .hidden { display: none !important; }

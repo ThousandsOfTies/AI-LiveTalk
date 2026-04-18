@@ -22,13 +22,20 @@
       <div id="viewer-controls">
         <button id="load-vrma-btn" title="VRMAアニメーションを読み込んで再生">🎬 VRMA</button>
         <select id="vrma-preset-select" title="モーションを選択">
-          <option value="vrma/VRMA_01.vrma">01 全身を見せる</option>
-          <option value="vrma/VRMA_02.vrma">02 挨拶</option>
-          <option value="vrma/VRMA_03.vrma" selected>03 Vサイン</option>
-          <option value="vrma/VRMA_04.vrma">04 撃つ</option>
-          <option value="vrma/VRMA_05.vrma">05 回る</option>
-          <option value="vrma/VRMA_06.vrma">06 モデルポーズ</option>
-          <option value="vrma/VRMA_07.vrma">07 屈伸運動</option>
+          <optgroup label="カジュアル (控えめ)">
+            <option value="vrma/casual/casual_listen.vrma">聞き手 (静か)</option>
+            <option value="vrma/casual/casual_talk_1.vrma">話し手 (標準)</option>
+            <option value="vrma/casual/casual_talk_2.vrma">話し手 (少し動きあり)</option>
+          </optgroup>
+          <optgroup label="アクション">
+            <option value="vrma/VRMA_01.vrma">01 全身を見せる</option>
+            <option value="vrma/VRMA_02.vrma">02 挨拶</option>
+            <option value="vrma/VRMA_03.vrma" selected>03 Vサイン</option>
+            <option value="vrma/VRMA_04.vrma">04 撃つ</option>
+            <option value="vrma/VRMA_05.vrma">05 回る</option>
+            <option value="vrma/VRMA_06.vrma">06 モデルポーズ</option>
+            <option value="vrma/VRMA_07.vrma">07 屈伸運動</option>
+          </optgroup>
         </select>
         <span id="status-indicator">読み込み中...</span>
       </div>
@@ -74,6 +81,7 @@
           <button class="tab-btn" data-tab="llm">LLM</button>
           <button class="tab-btn" data-tab="voice">音声</button>
           <button class="tab-btn" data-tab="sync">同期</button>
+          <button class="tab-btn" data-tab="help">ヘルプ</button>
         </div>
 
         <!-- キャラタブ -->
@@ -87,11 +95,38 @@
           <div id="vrm-edit-row" class="hidden">
             <label>
               キャラ名
-              <input type="text" id="vrm-char-name" placeholder="表示名を入力">
+              <input type="text" id="vrm-char-name" placeholder="表示名を入力" autocomplete="off" spellcheck="false">
             </label>
             <button type="button" id="vrm-delete-btn">🗑 削除</button>
           </div>
           <span id="vrm-load-status" class="hint"></span>
+          <label>
+            VRMA 腕補正角
+            <span class="hint">腕の開き具合を調整（負の値で脇を締める）</span>
+            <div class="setting-row">
+              <input type="range" id="setting-arm-correction" min="-90" max="90" step="1" value="0" style="flex:1">
+              <input type="number" id="setting-arm-correction-num" min="-90" max="90" step="1" value="0" style="width:50px">
+              <span>°</span>
+            </div>
+          </label>
+          <label>
+            VRMA 肩補正角
+            <span class="hint">肩を前後に調整（正の値で肩を前に出す）</span>
+            <div class="setting-row">
+              <input type="range" id="setting-shoulder-correction" min="-45" max="45" step="1" value="0" style="flex:1">
+              <input type="number" id="setting-shoulder-correction-num" min="-45" max="45" step="1" value="0" style="width:50px">
+              <span>°</span>
+            </div>
+          </label>
+          <label>
+            VRMA 胸補正角
+            <span class="hint">胸の反りを調整（正の値で前傾させ、胸の張りを抑える）</span>
+            <div class="setting-row">
+              <input type="range" id="setting-chest-correction" min="-45" max="45" step="1" value="0" style="flex:1">
+              <input type="number" id="setting-chest-correction-num" min="-45" max="45" step="1" value="0" style="width:50px">
+              <span>°</span>
+            </div>
+          </label>
           <label>
             システムプロンプト
             <textarea id="setting-system-prompt" rows="6"></textarea>
@@ -103,16 +138,16 @@
           <label>
             APIエンドポイント
             <span class="hint">OpenAI互換ならOllama (http://localhost:11434/v1) も可</span>
-            <input type="text" id="setting-endpoint" placeholder="https://api.openai.com/v1">
+            <input type="text" id="setting-endpoint" placeholder="https://generativelanguage.googleapis.com/v1beta/openai/" autocomplete="off" spellcheck="false">
           </label>
           <label>
             APIキー
             <span class="hint">Ollamaはダミー文字列でも可 (例: ollama)</span>
-            <input type="password" id="setting-api-key" placeholder="sk-...">
+            <input type="text" id="setting-api-key" placeholder="AIza..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
           </label>
           <label>
             モデル名
-            <input type="text" id="setting-model" placeholder="gpt-4o-mini">
+            <input type="text" id="setting-model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
           </label>
         </div>
 
@@ -129,7 +164,7 @@
           <label>
             AivisSpeech URL
             <span class="hint">起動中なら自動検出されます (デフォルト: http://localhost:10101)</span>
-            <input type="text" id="setting-aivis-url" placeholder="http://localhost:10101">
+            <input type="text" id="setting-aivis-url" placeholder="http://localhost:10101" autocomplete="off" spellcheck="false">
           </label>
           <label>
             AivisSpeech 話者ID
@@ -143,12 +178,12 @@
           <label>
             Aivis Cloud API キー
             <span class="hint">Cloud API を使うと PC なしでスマホからも高品質 TTS が使えます (<a href="https://hub.aivis-project.com/cloud-api/dashboard" target="_blank">取得</a>)</span>
-            <input type="password" id="setting-cloud-api-key" placeholder="aivis-...">
+            <input type="text" id="setting-cloud-api-key" placeholder="aivis-..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
           </label>
           <label>
             Aivis Cloud API モデル UUID
             <span class="hint">AivisHub のモデルページ URL に含まれる UUID (<a href="https://hub.aivis-project.com/" target="_blank">モデル一覧</a>)</span>
-            <input type="text" id="setting-cloud-model-uuid" placeholder="a59cb814-0083-4369-8542-f51a29e72af7">
+            <input type="text" id="setting-cloud-model-uuid" placeholder="a59cb814-0083-4369-8542-f51a29e72af7" autocomplete="off" spellcheck="false">
           </label>
         </div>
 
@@ -160,6 +195,23 @@
             <span>会話履歴の自動保存</span>
           </label>
           <span id="drive-status" class="hint"></span>
+        </div>
+
+        <!-- ヘルプタブ -->
+        <div class="tab-panel" id="tab-help">
+          <div class="help-content">
+            <h3>🤖 長期記憶（プロファイリング）機能</h3>
+            <p>このAIアシスタントは、会話を通じて「あなた独自の価値観や性格」をこっそり分析し、秘密のメモとして記憶しています。<br>このメモはシステムにピン留めされ、次回以降の会話でAIがあなたの良き理解者として振る舞うために使われます。</p>
+            
+            <h3>☁️ Google Drive 同期について</h3>
+            <p>サインインすると、会話履歴や上記のプロファイル、設定情報がGoogle Driveに保存されます。<br>ファイルは「アプリ専用の隠しフォルダ（appDataFolder）」に保存されるため、普段のDrive画面からは見えず、間違って消す心配もありません。<br>スマホや別のPCから同じアカウントでログインするだけで、全く同じ記憶を引き継いで会話を再開できます。</p>
+            
+            <h3>💰推奨：Gemini API（AI Studio）の利用</h3>
+            <p>このアプリは「会話履歴を全件送信する」ことで強い記憶力を発揮します。OpenAIのAPIだと高額になりますが、<b>Google AI Studioで取得した無料枠のGemini APIキー</b>を使用すればコストは1円もかかりません。<br>（※LLMタブでendpointを <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> 、modelに <code>gemini-2.5-flash</code> 等を指定してください）</p>
+
+            <h3>📱 スマホでの通信量について</h3>
+            <p>大量の会話履歴を送受信しても、テキストの通信量はごくわずか（数メガバイト以下）です。<br>ただし、音声通話時（TTS）の音声データ通信にはデータを使用します。それでも動画視聴に比べれば非常に軽量で、屋外でも安心してご利用いただけます。</p>
+          </div>
         </div>
 
         <!-- 共通アクション -->
