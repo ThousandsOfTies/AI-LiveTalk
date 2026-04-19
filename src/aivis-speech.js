@@ -51,8 +51,9 @@ export class AivisSpeechClient {
       _gainNodes.add(this._gainNode);
       _syncDeviceVolume();
     }
+    // バックグラウンド復帰後にiOSがsuspendedにするので、resume完了を確実に待つ
     if (this._audioCtx.state === 'suspended') {
-      this._audioCtx.resume().catch(e => console.warn('AudioContext resume ignored:', e));
+      await this._audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
     }
     return this._audioCtx;
   }
@@ -171,8 +172,9 @@ export class AivisCloudClient {
       _gainNodes.add(this._gainNode);
       _syncDeviceVolume();
     }
+    // バックグラウンド復帰後にiOSがsuspendedにするので、resume完了を確実に待つ
     if (this._audioCtx.state === 'suspended') {
-      this._audioCtx.resume().catch(e => console.warn('AudioContext resume ignored:', e));
+      await this._audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
     }
     return this._audioCtx;
   }

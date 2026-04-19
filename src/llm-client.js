@@ -181,3 +181,6 @@ export class LLMClient {
     this.history.push({ role: 'assistant', content: assistantMessage });
   }
 }
+
+/** デフォルトのシステムプロンプト（空欄保存時のリセット用に公開） */
+LLMClient.DEFAULT_SYSTEM_PROMPT = DEFAULTS.systemPrompt;

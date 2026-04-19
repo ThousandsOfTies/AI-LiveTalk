@@ -634,9 +634,18 @@ saveSettingsBtn.addEventListener('click', () => {
   llm.endpoint     = document.getElementById('setting-endpoint').value.trim();
   llm.apiKey       = document.getElementById('setting-api-key').value.trim();
   llm.model        = document.getElementById('setting-model').value.trim();
-  llm.systemPrompt = document.getElementById('setting-system-prompt').value.trim();
+  const rawPrompt = document.getElementById('setting-system-prompt').value.trim();
+  // 空欄で保存した場合はデフォルトのシステムプロンプトに初期化する
+  if (!rawPrompt) {
+    llm.systemPrompt = llm.constructor.DEFAULT_SYSTEM_PROMPT;
+    document.getElementById('setting-system-prompt').value = llm.systemPrompt;
+    setStatus('システムプロンプトをデフォルトに戻しました');
+  } else {
+    llm.systemPrompt = rawPrompt;
+  }
   _vrmSystemPrompts[_currentVrmId] = llm.systemPrompt;
   llm.ttsLang      = document.getElementById('setting-tts-lang').value;
+
 
   _savedArmCorr = parseFloat(document.getElementById('setting-arm-correction-num').value) || 0;
   viewer.setVRMArmCorrection(_savedArmCorr);
