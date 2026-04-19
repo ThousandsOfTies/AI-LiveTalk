@@ -624,6 +624,9 @@ settingsBtn.addEventListener('click', () => {
     document.getElementById('location-chk').checked = _locationEnabled;
     document.getElementById('location-status').textContent =
       _locationEnabled && llm.locationContext ? `✅ ${llm.locationContext}` : '';
+
+    // プロファイル（長期記憶）のテキストエリア更新
+    document.getElementById('setting-user-profile').value = llm.userProfile ? llm.userProfile.join('\n') : '';
   }
 });
 
@@ -650,6 +653,23 @@ saveSettingsBtn.addEventListener('click', () => {
     document.getElementById('setting-cloud-api-key').value.trim(),
     document.getElementById('setting-cloud-model-uuid').value.trim()
   );
+
+  // プロファイルの保存処理（変更があった場合のみ保存）
+  const profileText = document.getElementById('setting-user-profile').value;
+  if (profileText !== undefined) {
+    const newProfile = profileText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (JSON.stringify(llm.userProfile) !== JSON.stringify(newProfile)) {
+      llm.userProfile = newProfile;
+      if (driveSync.isSignedIn) {
+        driveSync.saveUserProfile(llm.userProfile).catch(e => console.warn('手動プロファイル保存失敗:', e));
+      } else {
+        if (typeof storage._b?.saveUserProfile === 'function') {
+          storage._b.saveUserProfile(llm.userProfile);
+        }
+      }
+      console.log('✅ プロファイルを手動で更新しました:', llm.userProfile);
+    }
+  }
 
   saveSettings();
 
