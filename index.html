@@ -21,22 +21,14 @@
       <input type="file" id="vrm-file-input" accept=".vrm" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
       <input type="file" id="vrma-file-input" accept=".vrma" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
       <div id="viewer-controls">
-        <button id="load-vrma-btn" title="VRMAアニメーションを読み込んで再生">🎬 VRMA</button>
-        <select id="vrma-preset-select" title="モーションを選択">
-          <optgroup label="カジュアル (控えめ)">
-            <option value="vrma/casual/casual_listen.vrma">聞き手 (静か)</option>
-            <option value="vrma/casual/casual_talk_1.vrma">話し手 (標準)</option>
-            <option value="vrma/casual/casual_talk_2.vrma">話し手 (少し動きあり)</option>
-          </optgroup>
-          <optgroup label="アクション">
-            <option value="vrma/VRMA_01.vrma">01 全身を見せる</option>
-            <option value="vrma/VRMA_02.vrma">02 挨拶</option>
-            <option value="vrma/VRMA_03.vrma" selected>03 Vサイン</option>
-            <option value="vrma/VRMA_04.vrma">04 撃つ</option>
-            <option value="vrma/VRMA_05.vrma">05 回る</option>
-            <option value="vrma/VRMA_06.vrma">06 モデルポーズ</option>
-            <option value="vrma/VRMA_07.vrma">07 屈伸運動</option>
-          </optgroup>
+        <button id="load-vrma-btn" title="選択中の感情スロットにVRMAを上書きロード">🎬 VRMA</button>
+        <select id="vrma-preset-select" title="感情モーションスロットを選択">
+          <option value="neutral" selected>😐 普通</option>
+          <option value="happy">😊 喜</option>
+          <option value="angry">😠 怒</option>
+          <option value="sad">😢 哀</option>
+          <option value="surprised">😲 驚</option>
+          <option value="relaxed">😌 楽</option>
         </select>
         <span id="status-indicator">読み込み中...</span>
       </div>
