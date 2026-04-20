@@ -4,42 +4,47 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { VRMAnimationLoaderPlugin, createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 
-// 感情ごとのアイドルモーションへの加算オフセット（モデスト）
+// 感情ごとのアイドルモーションへの加算オフセット
 const EMOTION_POSE_OFFSETS = {
   happy: {
-    chest:         { x:  0.04 },
-    head:          { x: -0.04, z:  0.02 },
-    leftShoulder:  { z:  0.04 },
-    rightShoulder: { z: -0.04 },
+    chest:         { x:  0.12 },
+    upperChest:    { x:  0.08 },
+    head:          { x: -0.12, z:  0.08 },
+    leftShoulder:  { z:  0.15 },
+    rightShoulder: { z: -0.15 },
   },
   sad: {
-    chest:         { x: -0.04 },
-    head:          { x:  0.07 },
-    leftShoulder:  { z: -0.05 },
-    rightShoulder: { z:  0.05 },
-    leftUpperArm:  { z: -0.06 },
-    rightUpperArm: { z:  0.06 },
+    chest:         { x: -0.12 },
+    upperChest:    { x: -0.08 },
+    head:          { x:  0.18 },
+    leftShoulder:  { z: -0.15 },
+    rightShoulder: { z:  0.15 },
+    leftUpperArm:  { z: -0.15 },
+    rightUpperArm: { z:  0.15 },
   },
   angry: {
-    chest:         { x:  0.06 },
-    head:          { x:  0.04 },
-    leftShoulder:  { z:  0.04 },
-    rightShoulder: { z: -0.04 },
-    leftUpperArm:  { z:  0.05 },
-    rightUpperArm: { z: -0.05 },
+    chest:         { x:  0.15 },
+    upperChest:    { x:  0.10 },
+    head:          { x:  0.10 },
+    leftShoulder:  { z:  0.12 },
+    rightShoulder: { z: -0.12 },
+    leftUpperArm:  { z:  0.12 },
+    rightUpperArm: { z: -0.12 },
   },
   surprised: {
-    chest:         { x: -0.03 },
-    head:          { x: -0.06 },
-    leftShoulder:  { z:  0.10 },
-    rightShoulder: { z: -0.10 },
+    chest:         { x: -0.08 },
+    upperChest:    { x: -0.06 },
+    head:          { x: -0.18 },
+    leftShoulder:  { z:  0.28 },
+    rightShoulder: { z: -0.28 },
   },
   relaxed: {
-    spine:         { z:  0.015 },
-    chest:         { x: -0.02 },
-    head:          { x: -0.02, y:  0.05 },
-    leftShoulder:  { z: -0.04 },
-    rightShoulder: { z:  0.03 },
+    spine:         { z:  0.05 },
+    chest:         { x: -0.06 },
+    upperChest:    { x: -0.04 },
+    head:          { x: -0.06, y:  0.12 },
+    leftShoulder:  { z: -0.12 },
+    rightShoulder: { z:  0.08 },
   },
 };
 
@@ -81,6 +86,8 @@ export class VRMViewer {
     this._emotionBlend         = 0.0;
     this._emotionBlendTarget   = 0.0;
     this._emotionHoldRemaining = 0.0;
+    this._emotionRestartIdle   = false;
+    this._armBaseZSaved        = null;
 
     // VRMAアニメーション
     this._mixer = null;
@@ -384,6 +391,13 @@ export class VRMViewer {
       this._emotionBlendTarget = 0.0;
       return;
     }
+    if (this._vrmaPlaying) {
+      this.stopVRMA();
+      this._emotionRestartIdle = true;
+      // VRMA停止後のアイドルモーションでT字にならないようarmBaseZを0に強制
+      this._armBaseZSaved = this._armBaseZ;
+      this._armBaseZ = 0.0;
+    }
     this._emotionPose          = emotion;
     this._emotionBlendTarget   = 1.0;
     this._emotionHoldRemaining = 4.0;
@@ -400,6 +414,15 @@ export class VRMViewer {
       this._emotionBlend = Math.min(this._emotionBlendTarget, this._emotionBlend + BLEND_IN * delta);
     } else if (this._emotionBlend > this._emotionBlendTarget) {
       this._emotionBlend = Math.max(this._emotionBlendTarget, this._emotionBlend - BLEND_OUT * delta);
+      if (this._emotionBlend <= 0.001 && this._emotionRestartIdle && this._idleVrmaUrl) {
+        this._emotionBlend       = 0;
+        this._emotionRestartIdle = false;
+        if (this._armBaseZSaved !== null) {
+          this._armBaseZ     = this._armBaseZSaved;
+          this._armBaseZSaved = null;
+        }
+        this.loadVRMA(this._idleVrmaUrl, { loop: true }).catch(() => {});
+      }
     }
   }
 
@@ -408,6 +431,7 @@ export class VRMViewer {
     const offsets = EMOTION_POSE_OFFSETS[this._emotionPose];
     if (!offsets) return;
     const w = this._emotionBlend;
+    if (Math.round(w * 10) % 10 === 0) console.debug('[EmotionPose]', this._emotionPose, 'blend=', w.toFixed(2));
     const h = this.vrm.humanoid;
     for (const [boneName, rot] of Object.entries(offsets)) {
       const node = h.getNormalizedBoneNode(boneName);
@@ -527,9 +551,11 @@ export class VRMViewer {
     if (this.vrm) {
       this._updateEmotionBlend(delta);
       this._updateBlinking(delta);
-      if (!this._vrmaPlaying) this._updateIdleMotion(elapsed);
+      if (!this._vrmaPlaying) {
+        this._updateIdleMotion(elapsed);
+        this._applyEmotionPoseOffset();
+      }
       if (this._mixer) this._mixer.update(delta);
-      this._applyEmotionPoseOffset();
       
       // アニメーションミキサー適用後のリアルタイム姿勢補正
       this._applyRealtimePoseCorrection();
