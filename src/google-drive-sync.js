@@ -1,8 +1,8 @@
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
-const SETTINGS_FILE = 'vrllm-settings.json';
-const VRM_FOLDER = 'VRLLM';
-const SESSION_KEY = 'vrllm_google_session';
+const SETTINGS_FILE = 'ailivetalk-settings.json';
+const VRM_FOLDER = 'AI-LiveTalk';
+const SESSION_KEY = 'ailivetalk_google_session';
 // アクセストークンの有効期限より少し短めに設定（秒）
 const TOKEN_LIFETIME_SEC = 3500;
 
@@ -220,17 +220,17 @@ export class GoogleDriveSync {
     this._requireAuth();
     const data = { messages, savedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const fileId = await this._findFile('vrllm-history.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-history.json', 'appDataFolder');
     if (fileId) {
       await this._patchMedia(fileId, blob);
     } else {
-      await this._multipartCreate('vrllm-history.json', blob, ['appDataFolder']);
+      await this._multipartCreate('ailivetalk-history.json', blob, ['appDataFolder']);
     }
   }
 
   async loadHistory() {
     this._requireAuth();
-    const fileId = await this._findFile('vrllm-history.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-history.json', 'appDataFolder');
     if (!fileId) return null;
     const res = await this._fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`履歴読み込み失敗 (${res.status})`);
@@ -243,17 +243,17 @@ export class GoogleDriveSync {
     this._requireAuth();
     const data = { profile: profileArray, savedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const fileId = await this._findFile('vrllm-profile.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-profile.json', 'appDataFolder');
     if (fileId) {
       await this._patchMedia(fileId, blob);
     } else {
-      await this._multipartCreate('vrllm-profile.json', blob, ['appDataFolder']);
+      await this._multipartCreate('ailivetalk-profile.json', blob, ['appDataFolder']);
     }
   }
 
   async loadUserProfile() {
     this._requireAuth();
-    const fileId = await this._findFile('vrllm-profile.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-profile.json', 'appDataFolder');
     if (!fileId) return []; // ファイルがなければ空配列
     const res = await this._fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`プロファイル読み込み失敗 (${res.status})`);
@@ -266,17 +266,17 @@ export class GoogleDriveSync {
   async savePresets(presets) {
     this._requireAuth();
     const blob = new Blob([JSON.stringify({ presets }, null, 2)], { type: 'application/json' });
-    const fileId = await this._findFile('vrllm-presets.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-presets.json', 'appDataFolder');
     if (fileId) {
       await this._patchMedia(fileId, blob);
     } else {
-      await this._multipartCreate('vrllm-presets.json', blob, ['appDataFolder']);
+      await this._multipartCreate('ailivetalk-presets.json', blob, ['appDataFolder']);
     }
   }
 
   async loadPresets() {
     this._requireAuth();
-    const fileId = await this._findFile('vrllm-presets.json', 'appDataFolder');
+    const fileId = await this._findFile('ailivetalk-presets.json', 'appDataFolder');
     if (!fileId) return [];
     const res = await this._fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     if (!res.ok) throw new Error(`プリセット読み込み失敗 (${res.status})`);

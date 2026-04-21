@@ -1,4 +1,4 @@
-const DB_NAME    = 'VRLLMLocal';
+const DB_NAME    = 'AILiveTalkLocal';
 const DB_VERSION = 1;
 
 export class LocalStorage {
