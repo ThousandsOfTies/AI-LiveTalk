@@ -17,6 +17,7 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
   const chatInput    = document.getElementById('chat-input');
   const sendBtn      = document.getElementById('send-btn');
   const micBtn       = document.getElementById('mic-btn');
+  const stopBtn      = document.getElementById('stop-btn');
 
   // ---- モジュール初期化 ----
   initUiUtils({ chatMessages, statusEl, chatInput, sendBtn, micBtn, driveSync, getAiAvatarUrl, speech });
@@ -32,7 +33,7 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
     scheduleHistorySave, getVrmaEmotionMap, resolveVrmaUrl,
   });
 
-  initVoiceManager({ speech, llm, micBtn, sendMessage });
+  initVoiceManager({ speech, llm, micBtn, stopBtn, sendMessage });
 
   initSettingsManager({ viewer, llm, speech, driveSync, storage });
 
