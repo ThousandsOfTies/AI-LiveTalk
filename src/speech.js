@@ -28,16 +28,24 @@ export class SpeechManager {
     /** @type {function():void} */
     this.onSpeechEnd = null;
 
-    // Aivis Cloud API クライアント（最優先）
-    // 設定画面または Google Drive 同期から applySettings() で設定される
-    this._cloud = new AivisCloudClient('', '');
-    this._useCloud = this._cloud.isAvailable();
-    if (this._useCloud) console.log('[TTS] Aivis Cloud API を使用します');
-
     // ローカル AivisSpeech クライアント (127.0.0.1 は HTTPS からでも例外的にアクセス可能)
     this._aivis = new AivisSpeechClient('http://127.0.0.1:10101', 888753760);
-    this._useAivis = false; // isAvailable() で確認後に true になる
-    if (!this._useCloud) this._checkAivis();
+    this._useAivis = false;
+
+    // Aivis Cloud API クライアント (SaaS)
+    this._cloud = new AivisCloudClient('', '');
+    this._useCloud = this._cloud.isAvailable();
+
+    // 優先順位: Local > Cloud
+    this._checkAivis().then(() => {
+      if (this._useAivis) {
+        console.log('[TTS] ローカル AivisSpeech を優先使用します');
+      } else if (this._useCloud) {
+        console.log('[TTS] Aivis Cloud API を使用します');
+      } else {
+        console.log('[TTS] ブラウザ SpeechSynthesis を使用します');
+      }
+    });
 
     this._recognition = null;
     this._initRecognition();
@@ -335,7 +343,24 @@ export class SpeechManager {
   async speak(text, options = {}) {
     this.isSpeaking = true;
 
-    // --- Aivis Cloud API (最優先) ---
+    // --- ローカル AivisSpeech (最優先) ---
+    if (this._useAivis) {
+      try {
+        await this._aivis.speak(text, {
+          onStart: () => this.onSpeechStart?.(),
+          onEnd: () => {
+            this.isSpeaking = false;
+            this.onSpeechEnd?.();
+          },
+        });
+        return;
+      } catch (err) {
+        console.warn('[AivisSpeech] ローカル読み上げ失敗、Cloud/ブラウザTTSを試みます:', err);
+        this._useAivis = false;
+      }
+    }
+
+    // --- Aivis Cloud API (セカンダリ) ---
     if (this._useCloud) {
       try {
         await this._cloud.speak(text, {
@@ -352,23 +377,6 @@ export class SpeechManager {
         this.isSpeaking = false;
         this.onSpeechEnd?.();
         throw err;
-      }
-    }
-
-    // --- ローカル AivisSpeech ---
-    if (this._useAivis) {
-      try {
-        await this._aivis.speak(text, {
-          onStart: () => this.onSpeechStart?.(),
-          onEnd: () => {
-            this.isSpeaking = false;
-            this.onSpeechEnd?.();
-          },
-        });
-        return;
-      } catch (err) {
-        console.warn('[AivisSpeech] 読み上げ失敗、ブラウザTTSにフォールバック:', err);
-        this._useAivis = false;
       }
     }
 
