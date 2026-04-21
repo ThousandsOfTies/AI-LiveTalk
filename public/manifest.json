@@ -1,6 +1,6 @@
 {
-  "name": "VRoid AI アシスタント",
-  "short_name": "VRLLM",
+  "name": "AI-LiveTalk",
+  "short_name": "AI-LiveTalk",
   "description": "VRoidアバターと話せるAIアシスタント。Google Driveで設定・VRMを同期。",
   "start_url": "./",
   "display": "standalone",
