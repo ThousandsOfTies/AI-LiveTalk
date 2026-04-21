@@ -270,7 +270,16 @@ async function _checkAivis() {
     _speech.updateAivisSettings(url, select.value);
     statusEl2.textContent = '✅ AivisSpeech に接続し、リストを更新しました';
   } catch (e) {
-    statusEl2.textContent = '❌ 接続失敗。URL または --cors_policy_mode all を確認してください';
+    statusEl2.innerHTML = `
+      <div style="color:#ff6b6b; margin-top:8px; border:1px solid #ff6b6b; padding:8px; border-radius:4px; font-size:12px; line-height:1.4;">
+        ❌ 接続に失敗しました<br><br>
+        <b>もっとも簡単な解決策:</b><br>
+        1. URLバー左の<b>「鍵マーク(または設定アイコン)」</b>をクリック<br>
+        2. <b>「サイトの設定」</b>を開く<br>
+        3. <b>「安全でないコンテンツ(Insecure content)」</b>を<b>「許可」</b>に変更<br>
+        4. このページを再読み込みして、もう一度更新してください。<br><br>
+        ※技術的な解決策: AivisSpeechを --cors_policy_mode all オプション付きで起動することでも解決します。
+      </div>`;
   }
 }
 
