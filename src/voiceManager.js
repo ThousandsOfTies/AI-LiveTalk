@@ -17,7 +17,7 @@ export function initVoiceManager({ speech, llm, micBtn, stopBtn, sendMessage }) 
     if (!_speech.isListening) return;
     _speech.stopListening();
     _stopBtn.classList.add('hidden');
-    setStatus('処理中...');
+    if (_speech.isNoisy) setStatus('処理中...');
   });
 
   if (!speech.sttSupported) {
@@ -60,16 +60,19 @@ export async function startListeningOnce() {
   _speech.onTranscript = (text) => {
     _micBtn.classList.remove('active');
     _stopBtn.classList.add('hidden');
-    chatInput.value = '';
-    chatInput.dispatchEvent(new Event('input'));
-    _sendMessage(text);
+    if (autoListenMode) {
+      _sendMessage(text);
+    } else {
+      chatInput.value = text;
+      chatInput.dispatchEvent(new Event('input'));
+      chatInput.focus();
+      setStatus('');
+    }
   };
 
   _speech.onListeningEnd = () => {
     _micBtn.classList.remove('active');
     _stopBtn.classList.add('hidden');
-    chatInput.value = '';
-    chatInput.dispatchEvent(new Event('input'));
     if (autoListenMode && !chatInput.disabled) {
       startListeningOnce();
     } else if (!autoListenMode) {
