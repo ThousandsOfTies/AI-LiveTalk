@@ -5,6 +5,7 @@ let _speech, _llm, _micBtn, _sendMessage;
 let autoListenMode    = false;
 let _longPressTimer   = null;
 let _longPressTriggered = false;
+let _pendingStartListening = false;
 
 export function initVoiceManager({ speech, llm, micBtn, sendMessage }) {
   _speech      = speech;
@@ -24,6 +25,17 @@ export function initVoiceManager({ speech, llm, micBtn, sendMessage }) {
     }
   });
 
+  // TTS 再生終了時の処理
+  const originalOnSpeechEnd = _speech.onSpeechEnd;
+  _speech.onSpeechEnd = () => {
+    originalOnSpeechEnd?.();
+    if (_pendingStartListening) {
+      console.log('[VoiceManager] AI の発話が終了したので予約されていたマイクを開始します');
+      _pendingStartListening = false;
+      startListeningOnce();
+    }
+  };
+
   speech.onNoiseModeChange = (isNoisy) => {
     micBtn.classList.toggle('noisy-mode', isNoisy);
     micBtn.textContent = isNoisy ? '✦' : '🎤';
@@ -36,6 +48,14 @@ export function initVoiceManager({ speech, llm, micBtn, sendMessage }) {
 }
 
 export async function startListeningOnce() {
+  // TTS 再生中なら予約だけして終了する（エコーバック防止）
+  if (_speech.isSpeaking) {
+    console.log('[VoiceManager] AI が発話中のためマイク開始を予約します');
+    _pendingStartListening = true;
+    setStatus('AI 発話終了まで待機中...');
+    return;
+  }
+
   _speech.setLang(_llm.ttsLang);
   await _speech.startListening();
   _micBtn.classList.add('active');
@@ -87,6 +107,7 @@ async function _enterAutoListen() {
 
 function _exitAutoListen() {
   autoListenMode = false;
+  _pendingStartListening = false;
   _micBtn.classList.remove('auto-listen');
   _micBtn.title = _speech.isNoisy
     ? 'Gemini 音声認識（騒音モード自動切替中）'
@@ -120,6 +141,14 @@ function _registerListeners() {
     if (_longPressTimer !== null) { clearTimeout(_longPressTimer); _longPressTimer = null; }
     if (_longPressTriggered) return;
     if (autoListenMode) { _exitAutoListen(); return; }
+
+    // もし予約中だった場合は予約を解除する（クリックでマイクをキャンセルしたい場合）
+    if (_pendingStartListening) {
+      _pendingStartListening = false;
+      setStatus('');
+      return;
+    }
+
     if (_speech.isListening) {
       _speech.stopListening();
       _micBtn.classList.remove('active');
