@@ -130,7 +130,8 @@ export class TTSPipeline {
   _enqueueSynth(text) {
     this._inFlight++;
 
-    const client = this._speech._useCloud ? this._speech._cloud : this._speech._aivis;
+    // ローカル AivisSpeech を優先し、未利用時のみ Cloud API を使用する (Local > Cloud)
+    const client = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
 
     // 合成は即座に開始（再生を待たない）
     const audioPromise = client.synthesize(text)
@@ -185,7 +186,7 @@ export class TTSPipeline {
 
   /** AudioBuffer を再生し、終了まで待機する */
   async _playBuffer(audioBuffer) {
-    const client = this._speech._useCloud ? this._speech._cloud : this._speech._aivis;
+    const client = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
     const audioCtx = await client._getAudioCtx();
     return new Promise(resolve => {
       const src = audioCtx.createBufferSource();

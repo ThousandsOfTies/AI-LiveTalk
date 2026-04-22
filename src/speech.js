@@ -75,6 +75,7 @@ export class SpeechManager {
   async _checkAivis() {
     this._useAivis = await this._aivis.isAvailable();
     if (this._useAivis) console.log('[TTS] ローカル AivisSpeech を使用します');
+    else if (this._useCloud) console.log('[TTS] Aivis Cloud API を使用します');
     else console.log('[TTS] ブラウザ SpeechSynthesis を使用します');
   }
 
@@ -448,8 +449,8 @@ export class SpeechManager {
    * iOS Safari 等での再生ブロック（無音状態のまま onended が来ないバグ）を回避する
    */
   async unlockAudio() {
-    if (this._useCloud) await this._cloud._getAudioCtx();
-    else if (this._useAivis) await this._aivis._getAudioCtx();
+    if (this._useAivis) await this._aivis._getAudioCtx();
+    else if (this._useCloud) await this._cloud._getAudioCtx();
   }
 
   stopSpeaking() {
