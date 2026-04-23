@@ -1,7 +1,7 @@
 /**
  * Web Speech API ラッパー
  * - STT (音声認識): 環境音レベルに応じて Web Speech API / Gemini Audio を自動切替
- * - TTS: Aivis Cloud API (最優先) / ローカル AivisSpeech / ブラウザ SpeechSynthesis (フォールバック)
+ * - TTS: ローカル AivisSpeech (最優先) / Aivis Cloud API / ブラウザ SpeechSynthesis (フォールバック)
  */
 import { AivisSpeechClient, AivisCloudClient } from './aivis-speech.js';
 
@@ -336,7 +336,7 @@ export class SpeechManager {
   }
 
   /**
-   * テキストを読み上げる（Cloud API > AivisSpeech > ブラウザTTS の優先順位）
+   * テキストを読み上げる（ローカル AivisSpeech > Cloud API > ブラウザTTS の優先順位）
    * @param {string} text
    * @param {{ lang?: string, rate?: number, pitch?: number }} options
    * @returns {Promise<void>}
