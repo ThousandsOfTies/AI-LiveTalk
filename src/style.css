@@ -94,17 +94,30 @@ body {
   letter-spacing: 0.02em;
 }
 
-#sex-toggle-btn {
+#sex-toggle {
+  display: flex;
+  border: 1px solid #2a2a48;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sex-btn {
   background: transparent;
   border: none;
-  color: #e8e8f8;
-  font-size: 18px;
+  color: #888;
+  font-size: 16px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.2s;
+  padding: 4px 10px;
+  transition: background 0.2s, color 0.2s;
+  line-height: 1;
 }
-#sex-toggle-btn:hover { background: #1e1e36; }
+.sex-btn.active {
+  background: #6c63ff;
+  color: #fff;
+}
+.sex-btn:not(.active):hover {
+  background: #1e1e36;
+  color: #e8e8f8;
+}
 
 #settings-btn {
   background: transparent;

@@ -35,7 +35,12 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
     });
   });
 
-  document.getElementById('sex-toggle-btn').addEventListener('click', switchSex);
+  document.getElementById('sex-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('.sex-btn');
+    if (!btn || btn.classList.contains('active')) return;
+    switchSex();
+  });
+  _updateSexToggle();
   document.getElementById('settings-btn').addEventListener('click', _openSettings);
   document.getElementById('save-settings-btn').addEventListener('click', _saveSettingsHandler);
   document.getElementById('cancel-settings-btn').addEventListener('click', _cancelSettings);
@@ -93,8 +98,7 @@ export async function switchSex() {
       await loadBuiltinVRM();
     }
   }
-  const btn = document.getElementById('sex-toggle-btn');
-  if (btn) btn.textContent = getCurrentSex() === 'female' ? '♀' : '♂';
+  _updateSexToggle();
   saveSettings();
 }
 
@@ -142,6 +146,7 @@ export function applySettings(s) {
 
   applyBackground(d.background);
   applySexDataToVRM();
+  _updateSexToggle();
 }
 
 export function resetToDefaults() {
@@ -400,6 +405,13 @@ function _updateCloudStatus() {
     msg = '✅ Cloud API 使用中';
   }
   document.getElementById('aivis-status').textContent = msg;
+}
+
+function _updateSexToggle() {
+  const sex = getCurrentSex();
+  document.querySelectorAll('.sex-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sex === sex);
+  });
 }
 
 function _registerCloudStatusListeners() {
