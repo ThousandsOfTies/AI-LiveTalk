@@ -256,7 +256,8 @@ function _saveSettingsHandler() {
 
   const rawPrompt = document.getElementById('setting-system-prompt').value.trim();
   if (!rawPrompt) {
-    _llm.systemPrompt = _llm.constructor.DEFAULT_SYSTEM_PROMPT;
+    const isMale = getCurrentSex() === 'male';
+    _llm.systemPrompt = isMale ? _llm.constructor.DEFAULT_MALE_SYSTEM_PROMPT : _llm.constructor.DEFAULT_SYSTEM_PROMPT;
     document.getElementById('setting-system-prompt').value = _llm.systemPrompt;
     setStatus('システムプロンプトをデフォルトに戻しました');
   } else {

@@ -18,11 +18,15 @@ const DEFAULTS = {
   endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/',
   apiKey: '',
   model: 'gemini-3.1-flash-lite-preview',
-  systemPrompt: `あなたの名前はリリムです。あなたは私の親しい友達です。タメ口で、フレンドリーにおしゃべりしてください。
+  systemPrompt: `あなたの名前はリリムです。あなたは私の親しい女の子の友達です。タメ口で、フレンドリーにおしゃべりしてください。
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,
   ttsLang: 'ja-JP',
 };
+
+export const DEFAULT_MALE_SYSTEM_PROMPT = `あなたの名前はロイドです。あなたは私の親しい男の子の友達です。タメ口で、フレンドリーにおしゃべりしてください。
+AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
+基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`;
 
 export class LLMClient {
   constructor() {
@@ -184,3 +188,4 @@ export class LLMClient {
 
 /** デフォルトのシステムプロンプト（空欄保存時のリセット用に公開） */
 LLMClient.DEFAULT_SYSTEM_PROMPT = DEFAULTS.systemPrompt;
+LLMClient.DEFAULT_MALE_SYSTEM_PROMPT = DEFAULT_MALE_SYSTEM_PROMPT;

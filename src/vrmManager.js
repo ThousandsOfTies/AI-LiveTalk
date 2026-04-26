@@ -1,5 +1,6 @@
 import { setStatus } from './uiUtils.js';
 import { getCurrentSex, getSexData, updateSexData } from './sexManager.js';
+import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
 
 let _viewer, _storage, _llm, _canvas, _saveSettings;
 let _vrmModelSelect, _vrmFileInput, _vrmLoadStatus, _vrmaPresetSelect, _loadVRMABtn, _vrmaFileInput;
@@ -161,7 +162,8 @@ export async function loadBuiltinVRM() {
 export async function loadInitialVRM() {
   _currentVrmId = getSexData().selectedVrmId;
   if (_currentVrmId === '__builtin__' || _currentVrmId === '__builtin_male__') {
-    _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? _vrmSystemPrompts['__builtin__'] ?? _llm.systemPrompt;
+    const defaultPrompt = _currentVrmId === '__builtin_male__' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
+    _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? defaultPrompt;
     await loadBuiltinVRM();
   } else {
     setStatus('モデルを読み込み中...');
@@ -183,7 +185,8 @@ export async function loadInitialVRM() {
       console.warn('前回のモデル読み込み失敗、ビルトインに戻します:', err.message);
       _currentVrmId = getCurrentSex() === 'male' ? '__builtin_male__' : '__builtin__';
       updateSexData(getCurrentSex(), { selectedVrmId: _currentVrmId });
-      _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? _vrmSystemPrompts['__builtin__'] ?? _llm.systemPrompt;
+      const defaultPrompt = _currentVrmId === '__builtin_male__' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
+      _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? defaultPrompt;
       await loadBuiltinVRM();
     } finally {
       _vrmModelSelect.disabled = false;
@@ -206,7 +209,12 @@ function _updateVrmEditRow() {
 }
 
 function _applyVrmSystemPrompt(vrmId) {
-  const prompt = _vrmSystemPrompts[vrmId] ?? _llm.systemPrompt;
+  let fallback = _llm.systemPrompt;
+  if (vrmId === '__builtin_male__') fallback = DEFAULT_MALE_SYSTEM_PROMPT;
+  else if (vrmId === '__builtin__') fallback = LLMClient.DEFAULT_SYSTEM_PROMPT;
+  else fallback = getCurrentSex() === 'male' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
+
+  const prompt = _vrmSystemPrompts[vrmId] ?? fallback;
   _llm.systemPrompt = prompt;
   const el = document.getElementById('setting-system-prompt');
   if (el) el.value = prompt;
@@ -359,7 +367,8 @@ function _registerListeners() {
       o => o.value !== '__add__' && o.value !== '__builtin__' && _vrmFileNames[o.value] === file.name
     );
     if (found) {
-      _vrmSystemPrompts[found.value] = _vrmSystemPrompts['__builtin__'] ?? _llm.systemPrompt;
+      const isMale = getCurrentSex() === 'male';
+      _vrmSystemPrompts[found.value] = isMale ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
       _vrmModelSelect.value = found.value;
       _currentVrmId = found.value;
       _updateVrmEditRow();

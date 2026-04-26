@@ -71,10 +71,30 @@ export function applySettings(s) {
     for (const sex of ['female', 'male']) {
       if (s.sex[sex]) {
         const d = s.sex[sex];
+        
+        // マイグレーション: 男性キャラに __builtin__ (Lilym) が設定されている場合は __builtin_male__ に修正
+        if (sex === 'male' && d.selectedVrmId === '__builtin__') {
+          d.selectedVrmId = '__builtin_male__';
+        }
+        // マイグレーション: 女性キャラに __builtin_male__ (Roid) が設定されている場合は __builtin__ に修正
+        if (sex === 'female' && d.selectedVrmId === '__builtin_male__') {
+          d.selectedVrmId = '__builtin__';
+        }
+
+        // マイグレーション: 旧バージョンで vrma/VRMA_... が保存されている場合はデフォルトに戻す
+        let mergedMotionMap = { ..._defaults[sex].motionMap };
+        if (d.motionMap) {
+          for (const [emo, path] of Object.entries(d.motionMap)) {
+            if (path && !path.includes('VRMA_')) {
+              mergedMotionMap[emo] = path;
+            }
+          }
+        }
+
         _sexData[sex] = {
           ..._defaults[sex],
           ...d,
-          motionMap: d.motionMap ? { ..._defaults[sex].motionMap, ...d.motionMap } : { ..._defaults[sex].motionMap },
+          motionMap: mergedMotionMap,
         };
       }
     }
