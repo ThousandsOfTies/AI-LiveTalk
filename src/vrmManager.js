@@ -137,6 +137,9 @@ export async function loadBuiltinVRM() {
   _vrmModelSelect.disabled = true;
   try {
     const sex = getCurrentSex();
+    // VRM ロード中に VRMA をプリフェッチしてブラウザキャッシュに乗せておく
+    const vrmaUrl = resolveVrmaUrl(_vrmaEmotionMap.neutral);
+    fetch(vrmaUrl).catch(() => {});
     if (sex === 'male') {
       try {
         await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Roid.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));

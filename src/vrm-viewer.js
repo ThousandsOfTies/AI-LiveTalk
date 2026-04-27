@@ -437,7 +437,7 @@ export class VRMViewer {
 
     if (this.vrm) {
       this._updateBlinking(delta);
-      if (!this._vrmaPlaying) this._updateIdleMotion(elapsed);
+      this._updateIdleMotion(elapsed);
       if (this._mixer) this._mixer.update(delta);
       
       // アニメーションミキサー適用後のリアルタイム姿勢補正
