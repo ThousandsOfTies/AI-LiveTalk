@@ -1,7 +1,7 @@
 import { setStatus } from './uiUtils.js';
 import {
   getVrmState, setCurrentVrmSystemPrompt, refreshVRMList, loadBuiltinVRM,
-  applySettings as vrmApplySettings, applySexDataToVRM,
+  loadDefaultVRMA, applySettings as vrmApplySettings, applySexDataToVRM,
 } from './vrmManager.js';
 import {
   getAutoSaveEnabled, setAutoSaveEnabled, cancelAutoSave,
@@ -93,6 +93,7 @@ export async function switchSex() {
       const file = new File([buf], f.name, { type: 'application/octet-stream' });
       await _viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
       setStatus('');
+      await loadDefaultVRMA(true);
     } catch (err) {
       console.warn('VRM読み込み失敗、ビルトインに戻します:', err.message);
       await loadBuiltinVRM();

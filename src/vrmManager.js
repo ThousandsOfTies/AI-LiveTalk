@@ -253,7 +253,7 @@ async function _handleVrmSelect(val) {
     setStatus('');
     _saveSettings();
     try {
-      await loadDefaultVRMA();
+      await loadDefaultVRMA(true);
     } catch (vrmaErr) {
       console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
     }
@@ -378,8 +378,7 @@ function _registerListeners() {
       _applyVrmSystemPrompt(found.value);
     }
     try {
-      await _viewer.loadVRMA(import.meta.env.BASE_URL + 'vrma/VRMA_03.vrma', { loop: true });
-      _vrmaPresetSelect.value = 'vrma/VRMA_03.vrma';
+      await loadDefaultVRMA(true);
     } catch (vrmaErr) {
       console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
     } finally {
