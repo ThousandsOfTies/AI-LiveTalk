@@ -181,6 +181,7 @@ async function _onSignInChange(isSignedIn, isNewLogin = false) {
         document.getElementById('setting-aivis-speaker').value    = sexData.speakerId || '';
         document.getElementById('setting-cloud-api-key').value    = ss.aivis_cloud_api_key || '';
         document.getElementById('setting-cloud-model-uuid').value = sexData.cloudModelUuid || '';
+        document.getElementById('setting-cloud-style-id').value   = sexData.cloudStyleId || '';
         locationStatus.textContent =
           getLocationEnabled() && _llm.locationContext ? `✅ ${_llm.locationContext}` : '';
       }

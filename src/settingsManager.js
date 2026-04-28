@@ -77,7 +77,7 @@ export async function switchSex() {
   const d = getSexData();
   const ss = _speech.getSettings();
   _speech.updateAivisSettings(ss.aivis_url || _speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(ss.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid);
+  _speech.updateCloudSettings(ss.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -139,7 +139,7 @@ export function applySettings(s) {
 
   const d = getSexData();
   _speech.updateAivisSettings(s.aivis_url || _speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(s.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid);
+  _speech.updateCloudSettings(s.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
 
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
@@ -163,7 +163,7 @@ export function resetToDefaults() {
 
   const d = getSexData();
   _speech.updateAivisSettings(_speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(_speech._cloud.apiKey, d.cloudModelUuid);
+  _speech.updateCloudSettings(_speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -214,6 +214,7 @@ function _openSettings() {
   speakerSelect.value = d.speakerId || '';
   document.getElementById('setting-cloud-api-key').value    = ss.aivis_cloud_api_key || '';
   document.getElementById('setting-cloud-model-uuid').value = d.cloudModelUuid || '';
+  document.getElementById('setting-cloud-style-id').value   = d.cloudStyleId || '';
 
   const indEl = document.getElementById('voice-sex-indicator');
   if (indEl) indEl.textContent = getCurrentSex() === 'female' ? '♀ 女性キャラの音声設定' : '♂ 男性キャラの音声設定';
@@ -282,8 +283,9 @@ function _saveSettingsHandler() {
 
   const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
   const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
-  _speech.updateCloudSettings(apiKey, modelUuid);
-  updateSexData(getCurrentSex(), { cloudModelUuid: modelUuid });
+  const styleId   = document.getElementById('setting-cloud-style-id').value.trim();
+  _speech.updateCloudSettings(apiKey, modelUuid, styleId);
+  updateSexData(getCurrentSex(), { cloudModelUuid: modelUuid, cloudStyleId: styleId });
 
   const profileText = document.getElementById('setting-user-profile').value;
   if (profileText !== undefined) {
@@ -398,13 +400,14 @@ function _registerSliderListeners() {
 function _updateCloudStatus() {
   const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
   const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
+  const styleId   = document.getElementById('setting-cloud-style-id').value.trim();
   let msg;
   if (!apiKey) {
     msg = _speech._useAivis ? '✅ ローカル AivisSpeech 使用中' : '❌ ブラウザTTS使用中';
   } else if (!modelUuid) {
     msg = '⚠️ Cloud API: モデルUUIDが未設定';
   } else {
-    msg = '✅ Cloud API 使用中';
+    msg = styleId ? `✅ Cloud API 使用中 (Style: ${styleId})` : '✅ Cloud API 使用中';
   }
   document.getElementById('aivis-status').textContent = msg;
 }
@@ -419,4 +422,5 @@ function _updateSexToggle() {
 function _registerCloudStatusListeners() {
   document.getElementById('setting-cloud-api-key').addEventListener('input', _updateCloudStatus);
   document.getElementById('setting-cloud-model-uuid').addEventListener('input', _updateCloudStatus);
+  document.getElementById('setting-cloud-style-id').addEventListener('input', _updateCloudStatus);
 }

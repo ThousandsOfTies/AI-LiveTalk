@@ -9,6 +9,19 @@
 // モジュール共通: デバイスボリューム監視
 // iOS Safari では <video> 要素の volumechange イベントがハードウェアボリューム変更時に発火する
 const _gainNodes = new Set();
+const _audioContexts = new Set();
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      for (const ctx of _audioContexts) {
+        if (ctx.state === 'suspended') {
+          ctx.resume().catch(e => console.warn('[AudioContext] visibilitychange resume failed:', e));
+        }
+      }
+    }
+  });
+}
 
 function _syncDeviceVolume() {
   if (typeof document === 'undefined') return;
@@ -41,19 +54,30 @@ export class AivisSpeechClient {
     this._currentSource = null;
   }
 
+  /** AudioContext を新規生成し visibilitychange 監視対象に登録する */
+  _createAudioCtx() {
+    if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
+    if (this._audioCtx) _audioContexts.delete(this._audioCtx);
+    const ctx = new AudioContext();
+    this._gainNode = ctx.createGain();
+    this._gainNode.connect(ctx.destination);
+    _gainNodes.add(this._gainNode);
+    _audioContexts.add(ctx);
+    _syncDeviceVolume();
+    return ctx;
+  }
+
   /** AudioContext を遅延初期化（ユーザー操作後でないと使えないため） */
   async _getAudioCtx() {
     if (!this._audioCtx || this._audioCtx.state === 'closed') {
-      if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
-      this._audioCtx = new AudioContext();
-      this._gainNode = this._audioCtx.createGain();
-      this._gainNode.connect(this._audioCtx.destination);
-      _gainNodes.add(this._gainNode);
-      _syncDeviceVolume();
+      this._audioCtx = this._createAudioCtx();
     }
-    // バックグラウンド復帰後にiOSがsuspendedにするので、resume完了を確実に待つ
     if (this._audioCtx.state === 'suspended') {
-      await this._audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
+      await this._audioCtx.resume().catch(() => {});
+      // resume 後も suspended のまま（ブラウザが拒否）なら再生成
+      if (this._audioCtx.state === 'suspended') {
+        this._audioCtx = this._createAudioCtx();
+      }
     }
     return this._audioCtx;
   }
@@ -153,28 +177,41 @@ export class AivisCloudClient {
   /**
    * @param {string} apiKey    Aivis Cloud API キー
    * @param {string} modelUuid AivisHub のモデル UUID
+   * @param {string|null} styleId スタイル ID (省略可)
    */
-  constructor(apiKey = '', modelUuid = '') {
+  constructor(apiKey = '', modelUuid = '', styleId = null) {
     this.apiKey    = apiKey;
     this.modelUuid = modelUuid;
+    this.styleId   = styleId;
     this._audioCtx      = null;
     this._gainNode      = null;
     this._currentSource = null;
   }
 
+  /** AudioContext を新規生成し visibilitychange 監視対象に登録する */
+  _createAudioCtx() {
+    if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
+    if (this._audioCtx) _audioContexts.delete(this._audioCtx);
+    const ctx = new AudioContext();
+    this._gainNode = ctx.createGain();
+    this._gainNode.connect(ctx.destination);
+    _gainNodes.add(this._gainNode);
+    _audioContexts.add(ctx);
+    _syncDeviceVolume();
+    return ctx;
+  }
+
   /** AudioContext を遅延初期化 */
   async _getAudioCtx() {
     if (!this._audioCtx || this._audioCtx.state === 'closed') {
-      if (this._gainNode) { _gainNodes.delete(this._gainNode); this._gainNode = null; }
-      this._audioCtx = new AudioContext();
-      this._gainNode = this._audioCtx.createGain();
-      this._gainNode.connect(this._audioCtx.destination);
-      _gainNodes.add(this._gainNode);
-      _syncDeviceVolume();
+      this._audioCtx = this._createAudioCtx();
     }
-    // バックグラウンド復帰後にiOSがsuspendedにするので、resume完了を確実に待つ
     if (this._audioCtx.state === 'suspended') {
-      await this._audioCtx.resume().catch(e => console.warn('AudioContext resume failed:', e));
+      await this._audioCtx.resume().catch(() => {});
+      // resume 後も suspended のまま（ブラウザが拒否）なら再生成
+      if (this._audioCtx.state === 'suspended') {
+        this._audioCtx = this._createAudioCtx();
+      }
     }
     return this._audioCtx;
   }
@@ -191,18 +228,22 @@ export class AivisCloudClient {
    */
   async synthesize(text) {
     if (!this.modelUuid) throw new Error('Aivis Cloud: モデルUUIDが未設定です。設定からモデルUUIDを入力してください');
+    const reqBody = {
+      model_uuid: this.modelUuid,
+      text,
+      use_ssml: false,
+      output_format: 'mp3',
+    };
+    if (this.styleId !== null && this.styleId !== '') {
+      reqBody.style_id = Number(this.styleId);
+    }
     const res = await fetch('https://api.aivis-project.com/v1/tts/synthesize', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model_uuid: this.modelUuid,
-        text,
-        use_ssml: false,
-        output_format: 'mp3',
-      }),
+      body: JSON.stringify(reqBody),
     });
 
     if (res.status === 401) throw new Error('Aivis Cloud API: APIキーが無効です');

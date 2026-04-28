@@ -83,10 +83,12 @@ export class SpeechManager {
    * Cloud API 設定を更新する
    * @param {string} apiKey
    * @param {string} modelUuid
+   * @param {string|null} styleId
    */
-  updateCloudSettings(apiKey, modelUuid) {
+  updateCloudSettings(apiKey, modelUuid, styleId = null) {
     this._cloud.apiKey    = apiKey;
     this._cloud.modelUuid = modelUuid;
+    this._cloud.styleId   = (styleId !== '' && styleId != null) ? styleId : null;
     this._useCloud = this._cloud.isAvailable();
     if (this._useCloud) {
       console.log('[TTS] Aivis Cloud API に切り替えました');
