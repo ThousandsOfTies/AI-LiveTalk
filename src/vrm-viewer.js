@@ -128,26 +128,10 @@ export class VRMViewer {
 
     if (source instanceof File) URL.revokeObjectURL(url);
 
-    // 上腕の初期Z角度を検出してアイドルモーションのベース値を決める
-    // Tポーズ(腕水平)なら ~0、Aポーズ/腕下ろし済みなら ~1.2 に近い値が入っている
-    this._armBaseZ = this._detectArmBaseZ(vrm);
     // ロード完了後にCSSレイアウトが確定してからフィット
     requestAnimationFrame(() => this._fitCameraToVRM(vrm));
 
     return vrm;
-  }
-
-  /**
-   * モデルの上腕ボーン初期角度を読み取り、アイドルモーション用のベースZ値を返す
-   * Tポーズ(腕水平)→ 1.2、Aポーズ/腕下ろし済み → 0 に近い値
-   */
-  _detectArmBaseZ(vrm) {
-    const node = vrm.humanoid?.getNormalizedBoneNode('leftUpperArm');
-    if (!node) return 0.0;
-    // ロード直後の初期回転Z（ラジアン）をそのままベースに使う
-    const initialZ = Math.abs(node.rotation.z);
-    // 0.3 未満ならAポーズ/腕下ろし系、それ以上ならTポーズ系
-    return initialZ < 0.3 ? 0.0 : 1.2;
   }
 
   /** モデルのバウンディングボックスに合わせてカメラと OrbitControls を自動調整 */
@@ -418,10 +402,9 @@ export class VRMViewer {
     _rot(h, 'leftShoulder',  { z:  Math.sin(t * 0.4) * shoulderAmp });
     _rot(h, 'rightShoulder', { z: -Math.sin(t * 0.4 + 0.3) * shoulderAmp });
 
-    // --- 上腕 (z=0がAポーズ/腕下ろし系モデルの自然位置、Tポーズ系は1.2が適切) ---
-    const armBaseZ = this._armBaseZ ?? 0.0;
-    _rot(h, 'leftUpperArm',  { z:  armBaseZ + Math.sin(t * 0.5) * armAmp, x:  0.05 });
-    _rot(h, 'rightUpperArm', { z: -armBaseZ - Math.sin(t * 0.5 + 0.4) * armAmp, x:  0.05 });
+    // --- 上腕 (VRMバインドポーズに依存せず常に腕下ろし姿勢 z=0 を基準にする) ---
+    _rot(h, 'leftUpperArm',  { z:  Math.sin(t * 0.5) * armAmp, x:  0.05 });
+    _rot(h, 'rightUpperArm', { z: -Math.sin(t * 0.5 + 0.4) * armAmp, x:  0.05 });
 
     // --- 前腕 ---
     _rot(h, 'leftLowerArm',  { z:  0.1 + Math.sin(t * 0.6) * 0.03 });
@@ -437,7 +420,7 @@ export class VRMViewer {
 
     if (this.vrm) {
       this._updateBlinking(delta);
-      this._updateIdleMotion(elapsed);
+      if (!this._vrmaPlaying) this._updateIdleMotion(elapsed);
       if (this._mixer) this._mixer.update(delta);
       
       // アニメーションミキサー適用後のリアルタイム姿勢補正
