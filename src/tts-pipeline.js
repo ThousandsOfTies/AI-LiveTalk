@@ -188,8 +188,21 @@ export class TTSPipeline {
 
   /** AudioBuffer を再生し、終了まで待機する */
   async _playBuffer(audioBuffer) {
-    const client = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
+    const client   = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
     const audioCtx = await client._getAudioCtx();
+
+    // LLM の非同期待機中に iOS が AudioContext をサスペンドする場合がある。
+    // src.start() 直前にもう一度 resume を試みる。
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume().catch(() => {});
+    }
+
+    // それでも running にできなければこの文をスキップして次へ進む
+    if (audioCtx.state !== 'running') {
+      console.warn('[TTSPipeline] AudioContext が suspended のため音声をスキップします (state:', audioCtx.state, ')');
+      return;
+    }
+
     return new Promise(resolve => {
       const src = audioCtx.createBufferSource();
       src.buffer = audioBuffer;
@@ -207,7 +220,7 @@ export class TTSPipeline {
       src.onended = finish;
       src.start(0);
 
-      // セーフティネット: iOS Safariで再生がサスペンドされ onended が来ない事態を確実に回避する
+      // セーフティネット: iOS Safari で onended が来ない事態への保険
       const durationMs = audioBuffer.duration * 1000;
       setTimeout(finish, durationMs + 800);
     });

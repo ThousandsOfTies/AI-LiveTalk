@@ -440,12 +440,22 @@ export class SpeechManager {
   }
 
   /**
-   * ブラウザのユーザーゲスチャー（クリック等）の瞬間にAudioContextを生成/再開し、
-   * iOS Safari 等での再生ブロック（無音状態のまま onended が来ないバグ）を回避する
+   * ブラウザのユーザーゲスチャー（クリック等）の瞬間に AudioContext / SpeechSynthesis を
+   * 事前解除し、iOS Safari 等での自動再生ブロックを回避する。
+   *
+   * - AivisSpeech / Cloud: AudioContext を生成・レジューム
+   * - ブラウザ TTS フォールバック: 無音 utterance で SpeechSynthesis をアンロック
+   *   (iOS Safari は非ユーザーアクションコンテキストからの speak() を無視するため)
    */
   async unlockAudio() {
-    if (this._useAivis) await this._aivis._getAudioCtx();
-    else if (this._useCloud) await this._cloud._getAudioCtx();
+    if (this._useAivis)       await this._aivis._getAudioCtx();
+    else if (this._useCloud)  await this._cloud._getAudioCtx();
+    else if ('speechSynthesis' in window) {
+      // iOS SpeechSynthesis アンロック: 無音ダミーで権限を取得しておく
+      const dummy = new SpeechSynthesisUtterance('');
+      dummy.volume = 0;
+      window.speechSynthesis.speak(dummy);
+    }
   }
 
   stopSpeaking() {
