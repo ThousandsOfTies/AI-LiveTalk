@@ -108,7 +108,7 @@ export async function refreshVRMList(selectId = undefined) {
   const sex = getCurrentSex();
   if (sex === 'male') {
     builtinOpt.value = '__builtin_male__';
-    builtinOpt.textContent = 'ロイド (デフォルト)';
+    builtinOpt.textContent = 'リルマ (デフォルト)';
   } else {
     builtinOpt.value = '__builtin__';
     builtinOpt.textContent = 'リリム (デフォルト)';
@@ -142,7 +142,7 @@ export async function loadBuiltinVRM() {
     fetch(vrmaUrl).catch(() => {});
     if (sex === 'male') {
       try {
-        await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Roid.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
+        await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Liluma.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
       } catch {
         await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Lilym.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
       }
