@@ -186,43 +186,59 @@ export class TTSPipeline {
     }
   }
 
-  /** AudioBuffer を再生し、終了まで待機する */
-  async _playBuffer(audioBuffer) {
+  /**
+   * 合成済み ArrayBuffer を HTML5 <audio> 要素で再生し、終了まで待機する。
+   * AudioContext の suspended / interrupted 問題を回避するため
+   * <audio> 要素を使う（iOS でも安定して動作する）。
+   */
+  async _playBuffer(rawBuffer) {
     const client   = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
-    const audioCtx = await client._getAudioCtx();
+    const mimeType = client.mimeType ?? 'audio/mpeg';
 
-    // LLM の非同期待機中に iOS が AudioContext をサスペンドする場合がある。
-    // src.start() 直前にもう一度 resume を試みる。
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume().catch(() => {});
-    }
+    const blob = new Blob([rawBuffer], { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.preload = 'auto';
+    this._currentSrc = audio;
 
-    // それでも running にできなければこの文をスキップして次へ進む
-    if (audioCtx.state !== 'running') {
-      console.warn('[TTSPipeline] AudioContext が suspended のため音声をスキップします (state:', audioCtx.state, ')');
-      return;
-    }
-
-    return new Promise(resolve => {
-      const src = audioCtx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(client._gainNode);
-      this._currentSrc = src;
-
+    return new Promise((resolve) => {
       let isDone = false;
       const finish = () => {
         if (isDone) return;
         isDone = true;
+        URL.revokeObjectURL(url);
         this._currentSrc = null;
         resolve();
       };
 
-      src.onended = finish;
-      src.start(0);
+      audio.onended  = finish;
+      audio.onerror  = (e) => {
+        console.warn('[TTSPipeline] <audio> 再生エラー:', e);
+        finish();
+      };
 
-      // セーフティネット: iOS Safari で onended が来ない事態への保険
-      const durationMs = audioBuffer.duration * 1000;
-      setTimeout(finish, durationMs + 800);
+      // セーフティタイムアウト（onended が来ない場合の保険）
+      // 推定再生時間 = バイト数 ÷ 平均ビットレート(128kbps=16KB/s)
+      const estimatedMs = (rawBuffer.byteLength / 16000) * 1000;
+      setTimeout(finish, Math.max(estimatedMs + 2000, 5000));
+
+      audio.play().catch((err) => {
+        console.warn('[TTSPipeline] audio.play() 失敗:', err.message);
+        finish();
+      });
     });
   }
+
+  /** 再生を停止する */
+  _stopCurrentAudio() {
+    if (this._currentSrc) {
+      if (this._currentSrc instanceof Audio) {
+        try { this._currentSrc.pause(); this._currentSrc.src = ''; } catch { /* ignore */ }
+      } else {
+        try { this._currentSrc.stop(); } catch { /* ignore */ }
+      }
+      this._currentSrc = null;
+    }
+  }
 }
+
