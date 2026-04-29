@@ -31,7 +31,7 @@ export function initChatManager({
     setStatus(`感情: ${emotion}`);
     const vrmaMap = _getVrmaEmotionMap();
     const url = _resolveVrmaUrl(vrmaMap[emotion] || vrmaMap.neutral);
-    _viewer.loadVRMA(url, { loop: false, isIdle: false }).catch(e => console.warn('感情VRMA再生失敗:', e));
+    _viewer.loadVRMA(url, { loop: true, isIdle: false }).catch(e => console.warn('感情VRMA再生失敗:', e));
   };
 
   _llm.onMemoDetected = (memo) => {
@@ -87,7 +87,11 @@ export async function sendMessage(text) {
     _viewer.applyEmotion('neutral');
     const p = new TTSPipeline(_speech);
     p.onSpeechStart = () => { _lipSync.start(); _viewer.startTalking(); };
-    p.onSpeechEnd   = () => { _lipSync.stop(); _viewer.stopTalking(); _viewer.resetExpressions(); };
+    p.onSpeechEnd   = () => { 
+      _lipSync.stop(); _viewer.stopTalking(); _viewer.resetExpressions(); 
+      const vrmaMap = _getVrmaEmotionMap();
+      _viewer.loadVRMA(_resolveVrmaUrl(vrmaMap.neutral), { loop: true, isIdle: true }).catch(e => console.warn('待機VRMA再生失敗:', e));
+    };
     p.push(msg);
     await p.done({ lang: _llm.ttsLang });
     return;
@@ -116,6 +120,8 @@ export async function sendMessage(text) {
     _viewer.stopTalking();
     _viewer.resetExpressions();
     setStatus('');
+    const vrmaMap = _getVrmaEmotionMap();
+    _viewer.loadVRMA(_resolveVrmaUrl(vrmaMap.neutral), { loop: true, isIdle: true }).catch(e => console.warn('待機VRMA再生失敗:', e));
   };
   pipeline.onSpeechError = (err) => {
     setStatus(`⚠️ TTS エラー: ${err.message}`);
