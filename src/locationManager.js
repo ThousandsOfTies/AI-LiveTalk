@@ -53,7 +53,7 @@ export function fetchLocationContext() {
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json&accept-language=ja`,
-            { headers: { 'User-Agent': 'VRLLM/1.0' } }
+            { headers: { 'User-Agent': 'AI-LiveTalk/1.0' } }
           );
           const data = await res.json();
           const addr    = data.address || {};

@@ -1,22 +1,23 @@
 import { setStatus } from './uiUtils.js';
-import { getCurrentSex, getSexData, updateSexData } from './sexManager.js';
+import { getCurrentPersona, getPersonaData, updatePersonaData } from './personaManager.js';
 import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
+import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
 
 let _viewer, _storage, _llm, _canvas, _saveSettings;
 let _vrmModelSelect, _vrmFileInput, _vrmLoadStatus, _vrmaPresetSelect, _loadVRMABtn, _vrmaFileInput;
 
-let _currentVrmId     = getSexData().selectedVrmId;
+let _currentVrmId     = getPersonaData().selectedVrmId;
 let _vrmCharNames     = {};
 let _vrmFileNames     = {};
 let _vrmSystemPrompts = {};
 let _aiAvatarUrl      = null;
-let _vrmaEmotionMap   = { ...getSexData().motionMap };
+let _vrmaEmotionMap   = { ...getPersonaData().motionMap };
 
 export function initVRMManager({ viewer, storage, llm, canvas, saveSettings }) {
-  _viewer      = viewer;
-  _storage     = storage;
-  _llm         = llm;
-  _canvas      = canvas;
+  _viewer       = viewer;
+  _storage      = storage;
+  _llm          = llm;
+  _canvas       = canvas;
   _saveSettings = saveSettings;
 
   _vrmModelSelect   = document.getElementById('vrm-model-select');
@@ -58,15 +59,15 @@ export function applySettings(s) {
   if (s.vrm_system_prompts) {
     try { _vrmSystemPrompts = JSON.parse(s.vrm_system_prompts); } catch { _vrmSystemPrompts = {}; }
   }
-  const currentSex = getCurrentSex();
-  const vrmId = s.sex?.[currentSex]?.selectedVrmId ?? s.selected_vrm_id;
+  const currentPersona = getCurrentPersona();
+  const vrmId = s.sex?.[currentPersona]?.selectedVrmId ?? s.selected_vrm_id;
   if (vrmId) _currentVrmId = vrmId;
-  const motionMap = s.sex?.[currentSex]?.motionMap;
+  const motionMap = s.sex?.[currentPersona]?.motionMap;
   if (motionMap) Object.assign(_vrmaEmotionMap, motionMap);
 }
 
-export function applySexDataToVRM() {
-  const d = getSexData();
+export function applyPersonaDataToVRM() {
+  const d = getPersonaData();
   Object.assign(_vrmaEmotionMap, d.motionMap);
   _currentVrmId = d.selectedVrmId;
   refreshVRMList(d.selectedVrmId);
@@ -105,12 +106,12 @@ export async function refreshVRMList(selectId = undefined) {
   _vrmModelSelect.innerHTML = '';
 
   const builtinOpt = document.createElement('option');
-  const sex = getCurrentSex();
-  if (sex === 'male') {
-    builtinOpt.value = '__builtin_male__';
+  const persona = getCurrentPersona();
+  if (persona === 'male') {
+    builtinOpt.value       = BUILTIN_MALE_ID;
     builtinOpt.textContent = 'リルマ (デフォルト)';
   } else {
-    builtinOpt.value = '__builtin__';
+    builtinOpt.value       = BUILTIN_FEMALE_ID;
     builtinOpt.textContent = 'リリム (デフォルト)';
   }
   _vrmModelSelect.appendChild(builtinOpt);
@@ -118,7 +119,7 @@ export async function refreshVRMList(selectId = undefined) {
   for (const f of files) {
     _vrmFileNames[f.id] = f.name;
     const opt = document.createElement('option');
-    opt.value = f.id;
+    opt.value       = f.id;
     opt.textContent = _vrmCharNames[f.id] || f.name;
     _vrmModelSelect.appendChild(opt);
   }
@@ -136,15 +137,13 @@ export async function loadBuiltinVRM() {
   setStatus('モデルを読み込み中...');
   _vrmModelSelect.disabled = true;
   try {
-    const sex = getCurrentSex();
-    // VRM ロード中に VRMA をプリフェッチしてブラウザキャッシュに乗せておく
-    const vrmaUrl = resolveVrmaUrl(_vrmaEmotionMap.neutral);
-    fetch(vrmaUrl).catch(() => {});
-    if (sex === 'male') {
+    const persona = getCurrentPersona();
+    fetch(resolveVrmaUrl(_vrmaEmotionMap.neutral)).catch(() => {}); // プリフェッチ
+    if (persona === 'male') {
       try {
         await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Liluma.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
       } catch {
-        await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Lilym.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
+        await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Lilym.vrm',  (pct) => setStatus(`読み込み中... ${pct}%`));
       }
     } else {
       await _viewer.loadVRM(import.meta.env.BASE_URL + 'vrm/Lilym.vrm', (pct) => setStatus(`読み込み中... ${pct}%`));
@@ -162,34 +161,55 @@ export async function loadBuiltinVRM() {
   }
 }
 
+/**
+ * ストレージ(Drive/IndexedDB)から VRM を DL して viewer に読み込む共通ヘルパー。
+ * @param {string}   vrmId
+ * @param {function} [onProgress]  (pct: number) => void
+ */
+export async function loadVrmFromStorage(vrmId, onProgress) {
+  const progressFn = onProgress ?? ((pct) => setStatus(`読み込み中... ${pct}%`));
+  let fname = _vrmFileNames[vrmId];
+  if (!fname) {
+    const files = await _storage.listVRMFiles();
+    const f = files.find(f => f.id === vrmId);
+    if (!f) throw new Error('保存されたモデルが見つかりません');
+    _vrmFileNames[f.id] = f.name;
+    fname = f.name;
+  }
+  const buf  = await _storage.downloadVRM(vrmId);
+  const file = new File([buf], fname, { type: 'application/octet-stream' });
+  await _viewer.loadVRM(file, progressFn);
+}
+
 export async function loadInitialVRM() {
-  _currentVrmId = getSexData().selectedVrmId;
-  if (_currentVrmId === '__builtin__' || _currentVrmId === '__builtin_male__') {
-    const defaultPrompt = _currentVrmId === '__builtin_male__' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
+  _currentVrmId = getPersonaData().selectedVrmId;
+  const isBuiltin = _currentVrmId === BUILTIN_FEMALE_ID || _currentVrmId === BUILTIN_MALE_ID;
+
+  if (isBuiltin) {
+    const defaultPrompt = _currentVrmId === BUILTIN_MALE_ID
+      ? DEFAULT_MALE_SYSTEM_PROMPT
+      : LLMClient.DEFAULT_SYSTEM_PROMPT;
     _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? defaultPrompt;
     await loadBuiltinVRM();
   } else {
     setStatus('モデルを読み込み中...');
     _vrmModelSelect.disabled = true;
     try {
-      const files = await _storage.listVRMFiles();
-      const f = files.find(f => f.id === _currentVrmId);
-      if (!f) throw new Error('保存されたモデルが見つかりません');
-      _vrmFileNames[f.id] = f.name;
       _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? _llm.systemPrompt;
-      const buf = await _storage.downloadVRM(_currentVrmId);
-      const file = new File([buf], f.name, { type: 'application/octet-stream' });
-      await _viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
+      await loadVrmFromStorage(_currentVrmId);
       setStatus('デフォルトモーション適用中...');
       await loadDefaultVRMA(true);
       setStatus('');
       captureAiAvatar();
     } catch (err) {
       console.warn('前回のモデル読み込み失敗、ビルトインに戻します:', err.message);
-      _currentVrmId = getCurrentSex() === 'male' ? '__builtin_male__' : '__builtin__';
-      updateSexData(getCurrentSex(), { selectedVrmId: _currentVrmId });
-      const defaultPrompt = _currentVrmId === '__builtin_male__' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
-      _llm.systemPrompt = _vrmSystemPrompts[_currentVrmId] ?? defaultPrompt;
+      const fallbackId = getCurrentPersona() === 'male' ? BUILTIN_MALE_ID : BUILTIN_FEMALE_ID;
+      _currentVrmId = fallbackId;
+      updatePersonaData(getCurrentPersona(), { selectedVrmId: fallbackId });
+      const defaultPrompt = fallbackId === BUILTIN_MALE_ID
+        ? DEFAULT_MALE_SYSTEM_PROMPT
+        : LLMClient.DEFAULT_SYSTEM_PROMPT;
+      _llm.systemPrompt = _vrmSystemPrompts[fallbackId] ?? defaultPrompt;
       await loadBuiltinVRM();
     } finally {
       _vrmModelSelect.disabled = false;
@@ -199,12 +219,13 @@ export async function loadInitialVRM() {
 
 // ---- Private helpers ----
 function _updateVrmEditRow() {
-  const val = _vrmModelSelect.value;
-  const editRow = document.getElementById('vrm-edit-row');
+  const val           = _vrmModelSelect.value;
+  const editRow       = document.getElementById('vrm-edit-row');
   const charNameInput = document.getElementById('vrm-char-name');
-  if (val && val !== '__add__' && val !== '__builtin__' && val !== '__builtin_male__') {
+  const isBuiltin     = val === BUILTIN_FEMALE_ID || val === BUILTIN_MALE_ID || val === '__add__';
+  if (val && !isBuiltin) {
     editRow.classList.remove('hidden');
-    charNameInput.value = _vrmCharNames[val] || '';
+    charNameInput.value       = _vrmCharNames[val] || '';
     charNameInput.placeholder = _vrmFileNames[val] || '表示名を入力';
   } else {
     editRow.classList.add('hidden');
@@ -213,14 +234,12 @@ function _updateVrmEditRow() {
 
 function _applyVrmSystemPrompt(vrmId) {
   let fallback = _llm.systemPrompt;
-  if (vrmId === '__builtin_male__') fallback = DEFAULT_MALE_SYSTEM_PROMPT;
-  else if (vrmId === '__builtin__') fallback = LLMClient.DEFAULT_SYSTEM_PROMPT;
-  else fallback = getCurrentSex() === 'male' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
-
-  const prompt = _vrmSystemPrompts[vrmId] ?? fallback;
-  _llm.systemPrompt = prompt;
+  if (vrmId === BUILTIN_MALE_ID)   fallback = DEFAULT_MALE_SYSTEM_PROMPT;
+  else if (vrmId === BUILTIN_FEMALE_ID) fallback = LLMClient.DEFAULT_SYSTEM_PROMPT;
+  else fallback = getCurrentPersona() === 'male' ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
+  _llm.systemPrompt = _vrmSystemPrompts[vrmId] ?? fallback;
   const el = document.getElementById('setting-system-prompt');
-  if (el) el.value = prompt;
+  if (el) el.value = _llm.systemPrompt;
 }
 
 async function _handleVrmSelect(val) {
@@ -229,34 +248,26 @@ async function _handleVrmSelect(val) {
     _vrmSystemPrompts[_currentVrmId] = promptEl.value.trim();
   }
 
-  if (val === '__builtin__' || val === '__builtin_male__') {
-    _currentVrmId = val;
-    updateSexData(getCurrentSex(), { selectedVrmId: val });
-    _updateVrmEditRow();
-    _applyVrmSystemPrompt(val);
+  const isBuiltin = val === BUILTIN_FEMALE_ID || val === BUILTIN_MALE_ID;
+  _currentVrmId = val;
+  updatePersonaData(getCurrentPersona(), { selectedVrmId: val });
+  _updateVrmEditRow();
+  _applyVrmSystemPrompt(val);
+
+  if (isBuiltin) {
     await loadBuiltinVRM();
     _saveSettings();
     return;
   }
-  _currentVrmId = val;
-  updateSexData(getCurrentSex(), { selectedVrmId: val });
-  _updateVrmEditRow();
-  _applyVrmSystemPrompt(val);
-  _vrmModelSelect.disabled = true;
-  _vrmLoadStatus.textContent = '読み込み中...';
+
+  _vrmModelSelect.disabled    = true;
+  _vrmLoadStatus.textContent  = '読み込み中...';
   try {
-    const buf = await _storage.downloadVRM(val);
-    const fname = _vrmFileNames[val] || val;
-    const file = new File([buf], fname, { type: 'application/octet-stream' });
-    await _viewer.loadVRM(file, (pct) => { _vrmLoadStatus.textContent = `読み込み中... ${pct}%`; });
-    _vrmLoadStatus.textContent = `✅ ${_vrmCharNames[val] || fname}`;
+    await loadVrmFromStorage(val, (pct) => { _vrmLoadStatus.textContent = `読み込み中... ${pct}%`; });
+    _vrmLoadStatus.textContent = `✅ ${_vrmCharNames[val] || _vrmFileNames[val] || val}`;
     setStatus('');
     _saveSettings();
-    try {
-      await loadDefaultVRMA(true);
-    } catch (vrmaErr) {
-      console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
-    }
+    await loadDefaultVRMA(true).catch(e => console.warn('デフォルトモーション読み込み失敗:', e.message));
     captureAiAvatar();
   } catch (err) {
     _vrmLoadStatus.textContent = `❌ ${err.message}`;
@@ -268,7 +279,7 @@ async function _handleVrmSelect(val) {
 
 function _registerListeners() {
   document.getElementById('vrm-char-name').addEventListener('change', async (e) => {
-    if (!_currentVrmId || _currentVrmId === '__builtin__') return;
+    if (!_currentVrmId || _currentVrmId === BUILTIN_FEMALE_ID) return;
     const name = e.target.value.trim();
     if (name) {
       _vrmCharNames[_currentVrmId] = name;
@@ -280,7 +291,8 @@ function _registerListeners() {
   });
 
   document.getElementById('vrm-delete-btn').addEventListener('click', async () => {
-    if (!_currentVrmId || _currentVrmId === '__builtin__' || _currentVrmId === '__builtin_male__') return;
+    const isBuiltin = _currentVrmId === BUILTIN_FEMALE_ID || _currentVrmId === BUILTIN_MALE_ID;
+    if (!_currentVrmId || isBuiltin) return;
     const dispName = _vrmCharNames[_currentVrmId] || _vrmFileNames[_currentVrmId] || _currentVrmId;
     if (!confirm(`「${dispName}」を削除しますか？`)) return;
     try {
@@ -289,8 +301,8 @@ function _registerListeners() {
       delete _vrmFileNames[_currentVrmId];
       delete _vrmSystemPrompts[_currentVrmId];
       _vrmLoadStatus.textContent = '';
-      const fallbackId = getCurrentSex() === 'male' ? '__builtin_male__' : '__builtin__';
-      updateSexData(getCurrentSex(), { selectedVrmId: fallbackId });
+      const fallbackId = getCurrentPersona() === 'male' ? BUILTIN_MALE_ID : BUILTIN_FEMALE_ID;
+      updatePersonaData(getCurrentPersona(), { selectedVrmId: fallbackId });
       await refreshVRMList(fallbackId);
       _applyVrmSystemPrompt(fallbackId);
       await loadBuiltinVRM();
@@ -301,13 +313,9 @@ function _registerListeners() {
     }
   });
 
-  _vrmModelSelect.addEventListener('change', (e) => {
-    _handleVrmSelect(e.target.value);
-  });
+  _vrmModelSelect.addEventListener('change', (e) => _handleVrmSelect(e.target.value));
 
-  document.getElementById('vrm-add-btn').addEventListener('click', () => {
-    _vrmFileInput.click();
-  });
+  document.getElementById('vrm-add-btn').addEventListener('click', () => _vrmFileInput.click());
 
   _loadVRMABtn.addEventListener('click', () => _vrmaFileInput.click());
 
@@ -326,13 +334,13 @@ function _registerListeners() {
       setStatus(`VRMAエラー: ${err.message}`);
       console.error(err);
     } finally {
-      _loadVRMABtn.disabled = false;
-      _vrmaFileInput.value = '';
+      _loadVRMABtn.disabled  = false;
+      _vrmaFileInput.value   = '';
     }
   });
 
   _vrmaPresetSelect.addEventListener('change', async () => {
-    const emotion = _vrmaPresetSelect.value;
+    const emotion     = _vrmaPresetSelect.value;
     const prevEmotion = _vrmaPresetSelect.dataset.current ?? 'neutral';
     setStatus('モーション読み込み中...');
     try {
@@ -350,7 +358,7 @@ function _registerListeners() {
   _vrmFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    _vrmModelSelect.disabled = true;
+    _vrmModelSelect.disabled   = true;
     _vrmLoadStatus.textContent = '保存中...';
     try {
       await _storage.uploadVRM(file, () => {});
@@ -362,28 +370,23 @@ function _registerListeners() {
       _vrmLoadStatus.textContent = `❌ ${err.message}`;
       console.error(err);
       _vrmModelSelect.disabled = false;
-      _vrmFileInput.value = '';
+      _vrmFileInput.value      = '';
       return;
     }
     await refreshVRMList();
     const found = Array.from(_vrmModelSelect.options).find(
-      o => o.value !== '__add__' && o.value !== '__builtin__' && _vrmFileNames[o.value] === file.name
+      o => o.value !== '__add__' && o.value !== BUILTIN_FEMALE_ID && _vrmFileNames[o.value] === file.name
     );
     if (found) {
-      const isMale = getCurrentSex() === 'male';
+      const isMale = getCurrentPersona() === 'male';
       _vrmSystemPrompts[found.value] = isMale ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
       _vrmModelSelect.value = found.value;
-      _currentVrmId = found.value;
+      _currentVrmId         = found.value;
       _updateVrmEditRow();
       _applyVrmSystemPrompt(found.value);
     }
-    try {
-      await loadDefaultVRMA(true);
-    } catch (vrmaErr) {
-      console.warn('デフォルトモーション読み込み失敗:', vrmaErr.message);
-    } finally {
-      _vrmModelSelect.disabled = false;
-      _vrmFileInput.value = '';
-    }
+    await loadDefaultVRMA(true).catch(e => console.warn('デフォルトモーション読み込み失敗:', e.message));
+    _vrmModelSelect.disabled = false;
+    _vrmFileInput.value      = '';
   });
 }

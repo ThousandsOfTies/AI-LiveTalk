@@ -1,7 +1,8 @@
 import { setStatus } from './uiUtils.js';
 import {
   getVrmState, setCurrentVrmSystemPrompt, refreshVRMList, loadBuiltinVRM,
-  loadDefaultVRMA, applySettings as vrmApplySettings, applySexDataToVRM,
+  loadDefaultVRMA, loadVrmFromStorage,
+  applySettings as vrmApplySettings, applyPersonaDataToVRM,
 } from './vrmManager.js';
 import {
   getAutoSaveEnabled, setAutoSaveEnabled, cancelAutoSave,
@@ -9,11 +10,13 @@ import {
 } from './historySync.js';
 import { getLocationEnabled, applySettings as locationApplySettings } from './locationManager.js';
 import {
-  getCurrentSex, setCurrentSex, getSexData, updateSexData,
-  resetToDefaults as sexResetToDefaults,
-  applySettings as sexApplySettings,
-  collectSettings as sexCollectSettings,
-} from './sexManager.js';
+  getCurrentPersona, setCurrentPersona, getPersonaData, updatePersonaData,
+  resetToDefaults as personaResetToDefaults,
+  applySettings as personaApplySettings,
+  collectSettings as personaCollectSettings,
+} from './personaManager.js';
+import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
+import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
 
 let _viewer, _llm, _speech, _driveSync, _storage;
 let _saveSettingsTimer = null;
@@ -38,9 +41,9 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
   document.getElementById('sex-toggle').addEventListener('click', (e) => {
     const btn = e.target.closest('.sex-btn');
     if (!btn || btn.classList.contains('active')) return;
-    switchSex();
+    switchPersona();
   });
-  _updateSexToggle();
+  _updatePersonaToggle();
   document.getElementById('settings-btn').addEventListener('click', _openSettings);
   document.getElementById('save-settings-btn').addEventListener('click', _saveSettingsHandler);
   document.getElementById('cancel-settings-btn').addEventListener('click', _cancelSettings);
@@ -59,9 +62,9 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
 }
 
 // ---- Public API ----
-export function getArmCorr()      { return getSexData().armCorrection; }
-export function getShoulderCorr() { return getSexData().shoulderCorrection; }
-export function getChestCorr()    { return getSexData().chestCorrection; }
+export function getArmCorr()      { return getPersonaData().armCorrection; }
+export function getShoulderCorr() { return getPersonaData().shoulderCorrection; }
+export function getChestCorr()    { return getPersonaData().chestCorrection; }
 
 export function applyBackground(path) {
   const panel = document.getElementById('viewer-panel');
@@ -70,11 +73,11 @@ export function applyBackground(path) {
     : '';
 }
 
-export async function switchSex() {
-  const next = getCurrentSex() === 'female' ? 'male' : 'female';
-  setCurrentSex(next);
-  applySexDataToVRM();
-  const d = getSexData();
+export async function switchPersona() {
+  const next = getCurrentPersona() === 'female' ? 'male' : 'female';
+  setCurrentPersona(next);
+  applyPersonaDataToVRM();
+  const d  = getPersonaData();
   const ss = _speech.getSettings();
   _speech.updateAivisSettings(ss.aivis_url || _speech._aivis.baseUrl, d.speakerId);
   _speech.updateCloudSettings(ss.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
@@ -82,16 +85,13 @@ export async function switchSex() {
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
   applyBackground(d.background);
-  if (d.selectedVrmId === '__builtin__' || d.selectedVrmId === '__builtin_male__') {
+
+  const isBuiltin = d.selectedVrmId === BUILTIN_FEMALE_ID || d.selectedVrmId === BUILTIN_MALE_ID;
+  if (isBuiltin) {
     await loadBuiltinVRM();
   } else {
     try {
-      const files = await _storage.listVRMFiles();
-      const f = files.find(f => f.id === d.selectedVrmId);
-      if (!f) throw new Error('保存されたモデルが見つかりません');
-      const buf = await _storage.downloadVRM(d.selectedVrmId);
-      const file = new File([buf], f.name, { type: 'application/octet-stream' });
-      await _viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
+      await loadVrmFromStorage(d.selectedVrmId);
       setStatus('');
       await loadDefaultVRMA(true);
     } catch (err) {
@@ -99,7 +99,7 @@ export async function switchSex() {
       await loadBuiltinVRM();
     }
   }
-  _updateSexToggle();
+  _updatePersonaToggle();
   saveSettings();
 }
 
@@ -108,7 +108,7 @@ export function collectSettings() {
   return {
     ..._llm.getSettings(),
     ..._speech.getSettings(),
-    ...sexCollectSettings(),
+    ...personaCollectSettings(),
     autosave_history:   String(getAutoSaveEnabled()),
     location_enabled:   String(getLocationEnabled()),
     vrm_char_names:     JSON.stringify(vrmState.charNames),
@@ -130,29 +130,27 @@ export function applySettings(s) {
     historyApplySettings(null);
     return;
   }
-  sexApplySettings(s);
+  personaApplySettings(s);
   _llm.applySettings(s);
   _speech.applySettings(s);
   historyApplySettings(s);
   locationApplySettings(s);
   vrmApplySettings(s);
 
-  const d = getSexData();
+  const d = getPersonaData();
   _speech.updateAivisSettings(s.aivis_url || _speech._aivis.baseUrl, d.speakerId);
   _speech.updateCloudSettings(s.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
-
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
-
   applyBackground(d.background);
-  applySexDataToVRM();
-  _updateSexToggle();
+  applyPersonaDataToVRM();
+  _updatePersonaToggle();
 }
 
 export function resetToDefaults() {
   console.log('[Sync] 全ての状態をデフォルトにリセットします...');
-  sexResetToDefaults();
+  personaResetToDefaults();
   historyApplySettings({ autosave_history: 'true' });
   locationApplySettings({ location_enabled: 'false' });
   vrmApplySettings({ vrm_char_names: '{}', vrm_system_prompts: '{}' });
@@ -161,14 +159,14 @@ export function resetToDefaults() {
   _llm.clearHistory();
   _llm.userProfile = [];
 
-  const d = getSexData();
+  const d = getPersonaData();
   _speech.updateAivisSettings(_speech._aivis.baseUrl, d.speakerId);
   _speech.updateCloudSettings(_speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
   applyBackground(d.background);
-  applySexDataToVRM();
+  applyPersonaDataToVRM();
 
   document.getElementById('chat-messages').innerHTML = '';
   const spEl = document.getElementById('setting-system-prompt');
@@ -176,27 +174,19 @@ export function resetToDefaults() {
   const upEl = document.getElementById('setting-user-profile');
   if (upEl) upEl.value = '';
 
-  const settingsPanel = document.getElementById('settings-panel');
-  if (!settingsPanel.classList.contains('hidden')) {
-    document.getElementById('setting-endpoint').value   = _llm.endpoint;
-    document.getElementById('setting-api-key').value    = _llm.apiKey;
-    document.getElementById('setting-model').value      = _llm.model;
-    document.getElementById('setting-tts-lang').value   = _llm.ttsLang;
-    const ss = _speech.getSettings();
-    document.getElementById('setting-aivis-url').value  = ss.aivis_url || '';
-    const sexData = getSexData();
-    document.getElementById('setting-aivis-speaker').value = sexData.speakerId || '';
+  // 設定パネルが開いているなら同期
+  if (!document.getElementById('settings-panel').classList.contains('hidden')) {
+    refreshSettingsPanel();
   }
 
   loadBuiltinVRM().catch(e => console.warn('Reset VRM failed:', e));
 }
 
-// ---- Private handlers ----
-function _openSettings() {
-  const settingsPanel = document.getElementById('settings-panel');
-  settingsPanel.classList.toggle('hidden');
-  if (settingsPanel.classList.contains('hidden')) return;
-
+/**
+ * 設定パネルの全フィールドを現在の状態に同期する（パネルの開閉は制御しない）。
+ * _openSettings() / resetToDefaults() / driveUI から呼ばれる。
+ */
+export function refreshSettingsPanel() {
   const vrmState = getVrmState();
   document.getElementById('setting-endpoint').value      = _llm.endpoint;
   document.getElementById('setting-api-key').value       = _llm.apiKey;
@@ -208,22 +198,23 @@ function _openSettings() {
   const ss = _speech.getSettings();
   document.getElementById('setting-aivis-url').value = ss.aivis_url || 'http://127.0.0.1:10101';
 
-  const d = getSexData();
+  const d = getPersonaData();
   const speakerSelect = document.getElementById('setting-aivis-speaker');
   speakerSelect.innerHTML = `<option value="${d.speakerId}">${d.speakerId}</option>`;
   speakerSelect.value = d.speakerId || '';
+
   document.getElementById('setting-cloud-api-key').value    = ss.aivis_cloud_api_key || '';
   document.getElementById('setting-cloud-model-uuid').value = d.cloudModelUuid || '';
   document.getElementById('setting-cloud-style-id').value   = d.cloudStyleId || '';
 
   const indEl = document.getElementById('voice-sex-indicator');
-  if (indEl) indEl.textContent = getCurrentSex() === 'female' ? '♀ 女性キャラの音声設定' : '♂ 男性キャラの音声設定';
+  if (indEl) indEl.textContent = getCurrentPersona() === 'female' ? '♀ 女性キャラの音声設定' : '♂ 男性キャラの音声設定';
 
   _updateCloudStatus();
 
   const armCorr = d.armCorrection;
-  document.getElementById('setting-arm-correction').value      = armCorr;
-  document.getElementById('setting-arm-correction-num').value  = armCorr;
+  document.getElementById('setting-arm-correction').value     = armCorr;
+  document.getElementById('setting-arm-correction-num').value = armCorr;
   _viewer.setVRMArmCorrection(armCorr);
 
   const shCorr = d.shoulderCorrection;
@@ -236,19 +227,25 @@ function _openSettings() {
   document.getElementById('setting-chest-correction-num').value = chCorr;
   _viewer.setVRMAChestCorrection(chCorr);
 
-  refreshVRMList();
-
   if (_driveSync.isSignedIn) {
     document.getElementById('drive-autosave-chk').checked = getAutoSaveEnabled();
   }
 
-  const locationEnabled = getLocationEnabled();
-  document.getElementById('location-chk').checked = locationEnabled;
+  document.getElementById('location-chk').checked = getLocationEnabled();
   document.getElementById('location-status').textContent =
-    locationEnabled && _llm.locationContext ? `✅ ${_llm.locationContext}` : '';
+    getLocationEnabled() && _llm.locationContext ? `✅ ${_llm.locationContext}` : '';
 
   document.getElementById('setting-user-profile').value =
     _llm.userProfile ? _llm.userProfile.join('\n') : '';
+}
+
+// ---- Private handlers ----
+function _openSettings() {
+  const settingsPanel = document.getElementById('settings-panel');
+  settingsPanel.classList.toggle('hidden');
+  if (settingsPanel.classList.contains('hidden')) return;
+  refreshSettingsPanel();
+  refreshVRMList();
 }
 
 function _saveSettingsHandler() {
@@ -258,8 +255,8 @@ function _saveSettingsHandler() {
 
   const rawPrompt = document.getElementById('setting-system-prompt').value.trim();
   if (!rawPrompt) {
-    const isMale = getCurrentSex() === 'male';
-    _llm.systemPrompt = isMale ? _llm.constructor.DEFAULT_MALE_SYSTEM_PROMPT : _llm.constructor.DEFAULT_SYSTEM_PROMPT;
+    const isMale = getCurrentPersona() === 'male';
+    _llm.systemPrompt = isMale ? DEFAULT_MALE_SYSTEM_PROMPT : LLMClient.DEFAULT_SYSTEM_PROMPT;
     document.getElementById('setting-system-prompt').value = _llm.systemPrompt;
     setStatus('システムプロンプトをデフォルトに戻しました');
   } else {
@@ -268,24 +265,24 @@ function _saveSettingsHandler() {
   setCurrentVrmSystemPrompt(_llm.systemPrompt);
   _llm.ttsLang = document.getElementById('setting-tts-lang').value;
 
-  const armCorrection      = parseFloat(document.getElementById('setting-arm-correction-num').value) || 0;
+  const armCorrection      = parseFloat(document.getElementById('setting-arm-correction-num').value)      || 0;
   const shoulderCorrection = parseFloat(document.getElementById('setting-shoulder-correction-num').value) || 0;
-  const chestCorrection    = parseFloat(document.getElementById('setting-chest-correction-num').value) || 0;
+  const chestCorrection    = parseFloat(document.getElementById('setting-chest-correction-num').value)    || 0;
   _viewer.setVRMArmCorrection(armCorrection);
   _viewer.setVRMAShoulderCorrection(shoulderCorrection);
   _viewer.setVRMAChestCorrection(chestCorrection);
-  updateSexData(getCurrentSex(), { armCorrection, shoulderCorrection, chestCorrection });
+  updatePersonaData(getCurrentPersona(), { armCorrection, shoulderCorrection, chestCorrection });
 
-  const url      = document.getElementById('setting-aivis-url').value.trim();
+  const url       = document.getElementById('setting-aivis-url').value.trim();
   const speakerId = document.getElementById('setting-aivis-speaker').value.trim();
   _speech.updateAivisSettings(url, speakerId);
-  updateSexData(getCurrentSex(), { speakerId });
+  updatePersonaData(getCurrentPersona(), { speakerId });
 
   const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
   const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
   const styleId   = document.getElementById('setting-cloud-style-id').value.trim();
   _speech.updateCloudSettings(apiKey, modelUuid, styleId);
-  updateSexData(getCurrentSex(), { cloudModelUuid: modelUuid, cloudStyleId: styleId });
+  updatePersonaData(getCurrentPersona(), { cloudModelUuid: modelUuid, cloudStyleId: styleId });
 
   const profileText = document.getElementById('setting-user-profile').value;
   if (profileText !== undefined) {
@@ -323,19 +320,17 @@ async function _checkAivis() {
     speakers.forEach(sp => {
       sp.styles.forEach(st => {
         const opt = document.createElement('option');
-        opt.value = st.id;
+        opt.value       = st.id;
         opt.textContent = `${sp.name} (${st.name}) : ${st.id}`;
         select.appendChild(opt);
       });
     });
 
-    if ([...select.options].some(o => o.value === currentId)) {
-      select.value = currentId;
-    }
+    if ([...select.options].some(o => o.value === currentId)) select.value = currentId;
 
     _speech.updateAivisSettings(url, select.value);
     statusEl2.textContent = '✅ AivisSpeech に接続し、リストを更新しました';
-  } catch (e) {
+  } catch {
     statusEl2.innerHTML = `
       <div style="color:#ff6b6b; margin-top:8px; border:1px solid #ff6b6b; padding:8px; border-radius:4px; font-size:12px; line-height:1.4;">
         ❌ 接続に失敗しました<br><br>
@@ -351,7 +346,7 @@ async function _checkAivis() {
 
 function _cancelSettings() {
   document.getElementById('settings-panel').classList.add('hidden');
-  const d = getSexData();
+  const d = getPersonaData();
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -366,35 +361,22 @@ function _clearHistory() {
 }
 
 function _registerSliderListeners() {
-  document.getElementById('setting-arm-correction').addEventListener('input', (e) => {
-    document.getElementById('setting-arm-correction-num').value = e.target.value;
-    _viewer.setVRMArmCorrection(parseFloat(e.target.value) || 0);
-  });
-  document.getElementById('setting-arm-correction-num').addEventListener('input', (e) => {
-    const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
-    document.getElementById('setting-arm-correction').value = v;
-    _viewer.setVRMArmCorrection(v);
-  });
-
-  document.getElementById('setting-shoulder-correction').addEventListener('input', (e) => {
-    document.getElementById('setting-shoulder-correction-num').value = e.target.value;
-    _viewer.setVRMAShoulderCorrection(parseFloat(e.target.value) || 0);
-  });
-  document.getElementById('setting-shoulder-correction-num').addEventListener('input', (e) => {
-    const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
-    document.getElementById('setting-shoulder-correction').value = v;
-    _viewer.setVRMAShoulderCorrection(v);
-  });
-
-  document.getElementById('setting-chest-correction').addEventListener('input', (e) => {
-    document.getElementById('setting-chest-correction-num').value = e.target.value;
-    _viewer.setVRMAChestCorrection(parseFloat(e.target.value) || 0);
-  });
-  document.getElementById('setting-chest-correction-num').addEventListener('input', (e) => {
-    const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
-    document.getElementById('setting-chest-correction').value = v;
-    _viewer.setVRMAChestCorrection(v);
-  });
+  const pairs = [
+    ['setting-arm-correction',      'setting-arm-correction-num',      v => _viewer.setVRMArmCorrection(v)],
+    ['setting-shoulder-correction', 'setting-shoulder-correction-num', v => _viewer.setVRMAShoulderCorrection(v)],
+    ['setting-chest-correction',    'setting-chest-correction-num',    v => _viewer.setVRMAChestCorrection(v)],
+  ];
+  for (const [sliderId, numId, apply] of pairs) {
+    document.getElementById(sliderId).addEventListener('input', (e) => {
+      document.getElementById(numId).value = e.target.value;
+      apply(parseFloat(e.target.value) || 0);
+    });
+    document.getElementById(numId).addEventListener('input', (e) => {
+      const v = Math.max(-90, Math.min(90, parseFloat(e.target.value) || 0));
+      document.getElementById(sliderId).value = v;
+      apply(v);
+    });
+  }
 }
 
 function _updateCloudStatus() {
@@ -412,10 +394,10 @@ function _updateCloudStatus() {
   document.getElementById('aivis-status').textContent = msg;
 }
 
-function _updateSexToggle() {
-  const sex = getCurrentSex();
+function _updatePersonaToggle() {
+  const persona = getCurrentPersona();
   document.querySelectorAll('.sex-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.sex === sex);
+    btn.classList.toggle('active', btn.dataset.sex === persona);
   });
 }
 

@@ -1,12 +1,13 @@
 import { updateUserAvatars, appendMessage, setStatus, setStatusTemp } from './uiUtils.js';
-import { applySettings, resetToDefaults, applyBackground } from './settingsManager.js';
+import { applySettings, resetToDefaults, applyBackground, refreshSettingsPanel } from './settingsManager.js';
 import { applyLocationIfEnabled, getLocationEnabled } from './locationManager.js';
-import { getAutoSaveEnabled } from './historySync.js';
+import { getAutoSaveEnabled, loadHistoryAndProfile } from './historySync.js';
 import {
   getCurrentVrmId, getVrmSystemPrompts, getVrmFileNames,
-  refreshVRMList, loadDefaultVRMA, captureAiAvatar, loadBuiltinVRM,
+  refreshVRMList, loadDefaultVRMA, captureAiAvatar, loadBuiltinVRM, loadVrmFromStorage,
 } from './vrmManager.js';
-import { getSexData } from './sexManager.js';
+import { getPersonaData } from './personaManager.js';
+import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
 
 let _driveSync, _storage, _llm, _speech, _viewer;
 
@@ -67,9 +68,9 @@ export function updateDriveSyncUI(isSignedIn) {
   if (isSignedIn) {
     const name  = _driveSync.name;
     const email = _driveSync.email;
-    initials.textContent       = _getInitials(name, email);
-    initials.style.background  = _avatarColorFromName(name || email);
-    initials.style.display     = '';
+    initials.textContent      = _getInitials(name, email);
+    initials.style.background = _avatarColorFromName(name || email);
+    initials.style.display    = '';
 
     const pic = _driveSync.picture;
     if (pic) {
@@ -80,8 +81,8 @@ export function updateDriveSyncUI(isSignedIn) {
   } else {
     img.src = '';
     img.classList.remove('loaded');
-    initials.textContent  = '';
-    initials.style.display = '';
+    initials.textContent    = '';
+    initials.style.display  = '';
     driveStatus.textContent = '';
   }
 }
@@ -91,27 +92,27 @@ export function showReauthToast(email) {
   const toast = document.createElement('div');
   toast.id = 'reauth-toast';
   Object.assign(toast.style, {
-    position:     'fixed',
-    top:          '30%',
-    left:         '50%',
-    transform:    'translateX(-50%)',
-    background:   'rgba(0, 0, 0, 0.9)',
-    color:        '#fff',
-    padding:      '20px 24px',
-    borderRadius: '12px',
-    boxShadow:    '0 10px 25px rgba(0,0,0,0.5)',
-    zIndex:       '9999',
-    display:      'flex',
+    position:      'fixed',
+    top:           '30%',
+    left:          '50%',
+    transform:     'translateX(-50%)',
+    background:    'rgba(0, 0, 0, 0.9)',
+    color:         '#fff',
+    padding:       '20px 24px',
+    borderRadius:  '12px',
+    boxShadow:     '0 10px 25px rgba(0,0,0,0.5)',
+    zIndex:        '9999',
+    display:       'flex',
     flexDirection: 'column',
-    alignItems:   'center',
-    gap:          '15px',
-    width:        '85%',
-    maxWidth:     '350px',
-    textAlign:    'center',
-    fontSize:     '14px',
+    alignItems:    'center',
+    gap:           '15px',
+    width:         '85%',
+    maxWidth:      '350px',
+    textAlign:     'center',
+    fontSize:      '14px',
   });
 
-  const text = document.createElement('span');
+  const text     = document.createElement('span');
   text.textContent = `Drive同期 (${email}) を再開しますか？`;
 
   const btn = document.createElement('button');
@@ -139,128 +140,87 @@ export function showReauthToast(email) {
 }
 
 async function _onSignInChange(isSignedIn, isNewLogin = false) {
-  const driveStatus     = document.getElementById('drive-status');
+  const driveStatus      = document.getElementById('drive-status');
   const driveAutosaveChk = document.getElementById('drive-autosave-chk');
-  const locationChk     = document.getElementById('location-chk');
-  const locationStatus  = document.getElementById('location-status');
-  const settingsPanel   = document.getElementById('settings-panel');
-  const chatMessages    = document.getElementById('chat-messages');
+  const locationChk      = document.getElementById('location-chk');
+  const settingsPanel    = document.getElementById('settings-panel');
+  const chatMessages     = document.getElementById('chat-messages');
 
   updateDriveSyncUI(isSignedIn);
 
-  if (isSignedIn) {
-    updateUserAvatars();
-
-    if (isNewLogin) resetToDefaults();
-
-    driveStatus.textContent = '同期中...';
-    _storage.loadSettings().then(async s => {
-      if (!s) {
-        driveStatus.textContent = '⚠️ Drive に設定がまだ保存されていません';
-        return;
-      }
-
-      const prevVrmId = getCurrentVrmId();
-      applySettings(s);
-      applyLocationIfEnabled();
-      driveAutosaveChk.checked = getAutoSaveEnabled();
-      locationChk.checked = getLocationEnabled();
-
-      if (!settingsPanel.classList.contains('hidden')) {
-        document.getElementById('setting-endpoint').value      = _llm.endpoint;
-        document.getElementById('setting-api-key').value       = _llm.apiKey;
-        document.getElementById('setting-model').value         = _llm.model;
-        const vrmSystemPrompts = getVrmSystemPrompts();
-        const currentVrmId    = getCurrentVrmId();
-        document.getElementById('setting-system-prompt').value =
-          vrmSystemPrompts[currentVrmId] ?? _llm.systemPrompt;
-        document.getElementById('setting-tts-lang').value = _llm.ttsLang;
-        const ss = _speech.getSettings();
-        const sexData = getSexData();
-        document.getElementById('setting-aivis-url').value        = ss.aivis_url || '';
-        document.getElementById('setting-aivis-speaker').value    = sexData.speakerId || '';
-        document.getElementById('setting-cloud-api-key').value    = ss.aivis_cloud_api_key || '';
-        document.getElementById('setting-cloud-model-uuid').value = sexData.cloudModelUuid || '';
-        document.getElementById('setting-cloud-style-id').value   = sexData.cloudStyleId || '';
-        locationStatus.textContent =
-          getLocationEnabled() && _llm.locationContext ? `✅ ${_llm.locationContext}` : '';
-      }
-
-      applyBackground(getSexData().background);
-
-      // プロファイルと会話履歴の非同期ロード
-      (async () => {
-        try {
-          console.log('[HistorySync] Drive同期後: プロファイル読み込み処理を開始します...');
-          const profileInfo = await _driveSync.loadUserProfile();
-          if (profileInfo && Array.isArray(profileInfo)) {
-            _llm.userProfile = profileInfo;
-            console.log('[HistorySync] Drive同期後: プロファイルを復元しました:', profileInfo);
-          } else {
-            console.log('[HistorySync] Drive同期後: 既存のプロファイルは見つかりませんでした（または空です）');
-          }
-        } catch (err) {
-          console.error('[HistorySync] Drive同期後: プロファイル読み込み失敗:', err.message);
-        }
-
-        if (getAutoSaveEnabled()) {
-          try {
-            console.log('[HistorySync] Drive同期後: 会話履歴の読み込み処理を開始します...');
-            const hist = await _storage.loadHistory();
-            if (hist && Array.isArray(hist.messages)) {
-              console.log(`[HistorySync] Drive同期後: 会話履歴を受信しました (API取得件数: ${hist.messages.length}件)`);
-              const pastMsgs = hist.messages.filter(m => m.role === 'user' || m.role === 'assistant');
-              if (pastMsgs.length > 0) {
-                _llm.history = isNewLogin ? pastMsgs : [...pastMsgs, ..._llm.history];
-                chatMessages.innerHTML = '';
-                for (const msg of _llm.history) appendMessage(msg.role, msg.content, true);
-                console.log(`[HistorySync] Drive同期後: 会話履歴を反映完了 (最終件数: ${_llm.history.length}件)`);
-              } else {
-                console.log('[HistorySync] Drive同期後: 受信した履歴データに有効な発言が含まれていませんでした');
-              }
-            } else {
-              console.log('[HistorySync] Drive同期後: クラウド上に保存された履歴データが存在しませんでした');
-            }
-          } catch (err) {
-            console.error('[HistorySync] Drive同期後: 会話履歴読み込み失敗:', err.message);
-          }
-        } else {
-          console.log('[HistorySync] Drive同期後: 自動保存設定がOFFのため、履歴の復元をスキップします');
-        }
-      })();
-
-      // Drive から設定を読んだ結果 VRM が変わっていれば読み込む
-      const currentVrmId = getCurrentVrmId();
-      if (currentVrmId !== prevVrmId) {
-        if (currentVrmId === '__builtin__' || currentVrmId === '__builtin_male__') {
-          try {
-            await loadBuiltinVRM();
-          } catch (err) {
-            console.warn('Drive サインイン後の組み込み VRM 読み込み失敗:', err.message);
-          }
-        } else {
-          try {
-            await refreshVRMList(currentVrmId);
-            const vrmFileNames = getVrmFileNames();
-            const fname = vrmFileNames[currentVrmId] || currentVrmId;
-            const buf = await _storage.downloadVRM(currentVrmId);
-            const file = new File([buf], fname, { type: 'application/octet-stream' });
-            await _viewer.loadVRM(file, (pct) => setStatus(`読み込み中... ${pct}%`));
-            await loadDefaultVRMA(true);
-            setStatus('');
-            captureAiAvatar();
-          } catch (err) {
-            console.warn('Drive サインイン後の VRM 読み込み失敗:', err.message);
-          }
-        }
-      }
-
-      setStatusTemp(driveStatus, '✅ Drive から設定を読み込みました');
-    }).catch(err => {
-      driveStatus.textContent = `❌ 設定の読み込みに失敗しました: ${err.message}`;
-    });
+  if (!isSignedIn) {
+    const existingToast = document.getElementById('reauth-toast');
+    if (existingToast) existingToast.remove();
+    return;
   }
 
-  const existingToast = document.getElementById('reauth-toast');
-  if (isSignedIn && existingToast) existingToast.remove();
+  // ---- サインイン後の処理 ----
+  updateUserAvatars();
+  if (isNewLogin) resetToDefaults();
+
+  driveStatus.textContent = '同期中...';
+
+  let s;
+  try {
+    s = await _storage.loadSettings();
+  } catch (err) {
+    driveStatus.textContent = `❌ 設定の読み込みに失敗しました: ${err.message}`;
+    return;
+  }
+
+  if (!s) {
+    driveStatus.textContent = '⚠️ Drive に設定がまだ保存されていません';
+    return;
+  }
+
+  const prevVrmId = getCurrentVrmId();
+  applySettings(s);
+  applyLocationIfEnabled();
+  driveAutosaveChk.checked = getAutoSaveEnabled();
+  locationChk.checked      = getLocationEnabled();
+
+  // 設定パネルが開いていれば UI を同期
+  if (!settingsPanel.classList.contains('hidden')) {
+    refreshSettingsPanel();
+  }
+
+  applyBackground(getPersonaData().background);
+
+  // プロファイル・履歴の非同期ロード（historySync に委譲）
+  loadHistoryAndProfile({
+    storage:         _storage,
+    llm:             _llm,
+    chatMessages,
+    replaceHistory:  isNewLogin,
+    loadUserProfile: () => _driveSync.loadUserProfile(),
+    logPrefix:       'Drive同期後',
+  });
+
+  // VRM が変わっていれば再ロード
+  const currentVrmId = getCurrentVrmId();
+  if (currentVrmId !== prevVrmId) {
+    await _reloadVrmAfterSync(currentVrmId);
+  }
+
+  setStatusTemp(driveStatus, '✅ Drive から設定を読み込みました');
+}
+
+/** Drive サインイン後に VRM を再ロードするヘルパー */
+async function _reloadVrmAfterSync(vrmId) {
+  const isBuiltin = vrmId === BUILTIN_FEMALE_ID || vrmId === BUILTIN_MALE_ID;
+  if (isBuiltin) {
+    try { await loadBuiltinVRM(); } catch (err) {
+      console.warn('Drive サインイン後の組み込み VRM 読み込み失敗:', err.message);
+    }
+  } else {
+    try {
+      await refreshVRMList(vrmId);
+      await loadVrmFromStorage(vrmId);
+      await loadDefaultVRMA(true);
+      setStatus('');
+      captureAiAvatar();
+    } catch (err) {
+      console.warn('Drive サインイン後の VRM 読み込み失敗:', err.message);
+    }
+  }
 }
