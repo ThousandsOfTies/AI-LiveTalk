@@ -440,26 +440,27 @@ export class SpeechManager {
   }
 
   /**
-   * ブラウザのユーザーゲスチャー（クリック等）の瞬間に AudioContext / SpeechSynthesis を
-   * 事前解除し、iOS Safari 等での自動再生ブロックを回避する。
-   *
-   * - AivisSpeech / Cloud: AudioContext を生成・レジューム
-   * - ブラウザ TTS フォールバック: 無音 utterance で SpeechSynthesis をアンロック
-   *   (iOS Safari は非ユーザーアクションコンテキストからの speak() を無視するため)
+   * ユーザーゲスチャーの直後に呼び出し、iOS Safari の自動再生ブロックを解除する。
+   * HTML5 <audio> は AudioContext と異なりユーザーアクション後に一度 play() すれば
+   * 以降は非同期コンテキストからでも再生できる。
    */
   async unlockAudio() {
-    if (this._useAivis)       await this._aivis._getAudioCtx();
-    else if (this._useCloud)  await this._cloud._getAudioCtx();
-    else if ('speechSynthesis' in window) {
-      // iOS SpeechSynthesis アンロック: 無音ダミーで権限を取得しておく
-      const dummy = new SpeechSynthesisUtterance('');
-      dummy.volume = 0;
-      window.speechSynthesis.speak(dummy);
+    // <audio> のアンロック
+    const dummy = new Audio();
+    dummy.volume = 0;
+    await dummy.play().catch(() => {}); // 失敗しても OK（権限の取得が目的）
+
+    // ブラウザ TTS フォールバック用の SpeechSynthesis アンロック
+    if (!this._useAivis && !this._useCloud && 'speechSynthesis' in window) {
+      const utt = new SpeechSynthesisUtterance('');
+      utt.volume = 0;
+      window.speechSynthesis.speak(utt);
     }
   }
 
   stopSpeaking() {
     this._aivis.stop();
+    this._cloud.stop();
     window.speechSynthesis.cancel();
     this.isSpeaking = false;
   }

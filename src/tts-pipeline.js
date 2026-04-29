@@ -90,13 +90,9 @@ export class TTSPipeline {
   /** 再生を中断する */
   stop() {
     this._stopped = true;
-    if (this._currentSrc) {
-      try { this._currentSrc.stop(); } catch { /* 停止済み */ }
-      this._currentSrc = null;
-    }
+    this._stopCurrentAudio();
     this._queue   = [];
     this._inFlight = 0;
-    this._speech._aivis?.stop();
     this._speech.stopSpeaking();
     this._doneResolve?.();
   }
