@@ -13,8 +13,8 @@ export function initPlatformUtils({ viewer }) {
   window.addEventListener('focus',    _acquireWakeLock);
   window.addEventListener('pageshow', _acquireWakeLock);
 
-  // PWA: Service Worker
-  if ('serviceWorker' in navigator) {
+  // PWA: Service Worker（本番ビルドのみ登録。開発時はキャッシュが古いJSを返すため無効）
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`)
         .catch(err => console.warn('SW 登録失敗:', err));

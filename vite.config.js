@@ -79,9 +79,10 @@ function aivisAutoStart() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [aivisAutoStart()],
-  base: process.env.GITHUB_PAGES
+  // ビルド時はGitHub Pages用のサブディレクトリbaseを使用、開発時は/
+  base: command === 'build'
     ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'AI-LiveTalk'}/`
     : '/',
   server: {
@@ -94,4 +95,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

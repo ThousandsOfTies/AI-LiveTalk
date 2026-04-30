@@ -1,6 +1,6 @@
 // VRLLM Service Worker
 // 戦略: 同一オリジンの静的アセットはキャッシュ優先で返し、バックグラウンドで更新
-const CACHE = 'vrllm-v1';
+const CACHE = 'vrllm-v2';
 
 self.addEventListener('install', (e) => {
   // アプリシェルを即座にキャッシュ

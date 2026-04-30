@@ -241,6 +241,9 @@ body {
   height: 40px;
   transition: background 0.2s, opacity 0.2s;
   flex-shrink: 0;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 #send-btn:hover:not(:disabled) { background: #5a53e0; }
 #send-btn:disabled { opacity: 0.5; cursor: default; }
