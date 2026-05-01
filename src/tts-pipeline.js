@@ -193,7 +193,11 @@ export class TTSPipeline {
 
     const blob = new Blob([rawBuffer], { type: mimeType });
     const url  = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+
+    // iOS Safari 対策: アンロック済みの共有 Audio 要素を使い回す
+    const audio = this._speech._sharedAudio || new Audio();
+    audio.src = url;
+    audio.volume = 1.0;
     audio.preload = 'auto';
     this._currentSrc = audio;
 
@@ -203,6 +207,8 @@ export class TTSPipeline {
         if (isDone) return;
         isDone = true;
         URL.revokeObjectURL(url);
+        // 共有要素の場合は src を空にする（メモリ解放）が、インスタンスは保持
+        audio.src = '';
         this._currentSrc = null;
         resolve();
       };
@@ -213,8 +219,7 @@ export class TTSPipeline {
         finish();
       };
 
-      // セーフティタイムアウト（onended が来ない場合の保険）
-      // 推定再生時間 = バイト数 ÷ 平均ビットレート(128kbps=16KB/s)
+      // セーフティタイムアウト
       const estimatedMs = (rawBuffer.byteLength / 16000) * 1000;
       setTimeout(finish, Math.max(estimatedMs + 2000, 5000));
 

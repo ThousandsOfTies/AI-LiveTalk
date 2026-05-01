@@ -64,6 +64,9 @@ export class SpeechManager {
     this._mediaRecorder = null;
     this._audioChunks   = [];
     this._mimeType      = '';
+
+    // ---- モバイル向け音声再生アンロック用 ----
+    this._sharedAudio   = null;
   }
 
   get sttSupported() {
@@ -446,16 +449,23 @@ export class SpeechManager {
 
   /**
    * ユーザーゲスチャーの直後に呼び出し、iOS Safari の自動再生ブロックを解除する。
-   * HTML5 <audio> は AudioContext と異なりユーザーアクション後に一度 play() すれば
-   * 以降は非同期コンテキストからでも再生できる。
+   * 以降、この SpeechManager インスタンスが保持する _sharedAudio を使って再生を行う。
    */
   async unlockAudio() {
-    // <audio> のアンロック
-    const dummy = new Audio();
+    if (!this._sharedAudio) {
+      this._sharedAudio = new Audio();
+      this._sharedAudio.preload = 'auto';
+    }
+
     // 無音の短いWAVデータ
-    dummy.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFRm10IBAAAAABAAEAIlYAAClWAAACABAAZGF0YQAAAAA=';
-    dummy.volume = 0;
-    await dummy.play().catch(() => {}); // src があれば即座に解決/拒否される
+    this._sharedAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFRm10IBAAAAABAAEAIlYAAClWAAACABAAZGF0YQAAAAA=';
+    this._sharedAudio.volume = 0;
+
+    try {
+      await this._sharedAudio.play();
+    } catch (e) {
+      console.warn('[SpeechManager] unlockAudio 失敗:', e.message);
+    }
 
     // ブラウザ TTS フォールバック用の SpeechSynthesis アンロック
     if (!this._useAivis && !this._useCloud && 'speechSynthesis' in window) {

@@ -50,6 +50,7 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage }) 
 
   // 送信ボタンが押されたら、もし録音中なら停止させる（送信処理自体は chatManager 側で行われる）
   _sendBtn.addEventListener('click', () => {
+    _speech.unlockAudio(); // 音声再生制限を解除
     if (_speech.isListening) {
       _speech.stopListening();
     }
@@ -154,6 +155,7 @@ function _registerListeners() {
 
   _micBtn.addEventListener('pointerdown', () => {
     if (_micBtn.disabled) return;
+    _speech.unlockAudio(); // 音声再生制限を解除
     _speech.startNoiseMonitoring();
     _longPressTriggered = false;
     _longPressTimer = setTimeout(() => {
