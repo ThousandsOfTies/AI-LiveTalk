@@ -274,7 +274,8 @@ body {
   -webkit-touch-callout: none;
   touch-action: manipulation;
 }
-#mic-btn:hover:not(:disabled) { background: #22223a; }
+/* ホバー時の背景変化を無効化（デザイン維持のため） */
+#mic-btn:hover:not(:disabled) { }
 #mic-btn:disabled { opacity: 0.4; cursor: default; }
 /* 騒音モード（Gemini自動切替中）: Googleブルー枠 */
 #mic-btn.noisy-mode {
