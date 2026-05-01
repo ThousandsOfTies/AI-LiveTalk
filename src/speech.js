@@ -139,6 +139,7 @@ export class SpeechManager {
     this._recognition.interimResults = true;
 
     this._recognition.onresult = (e) => {
+      this._resetRecognitionTimer(); // 何か聞き取ったらタイマーをリセット
       const result = e.results[e.results.length - 1];
       const text = result[0].transcript;
       if (result.isFinal) {
@@ -224,6 +225,11 @@ export class SpeechManager {
       this.isNoisy = nowNoisy;
       this.onNoiseModeChange?.(this.isNoisy);
     }
+
+    // 録音中（特にGeminiモード）の場合、音を検知したらタイマーをリセット
+    if (this.isListening && nowNoisy) {
+      this._resetRecognitionTimer();
+    }
   }
 
   // ---- Gemini Audio STT ----
@@ -250,13 +256,7 @@ export class SpeechManager {
     this._mediaRecorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); this._transcribeGemini(); };
     this._mediaRecorder.start();
     this.isListening = true;
-    clearTimeout(this._recognitionTimer);
-    this._recognitionTimer = setTimeout(() => {
-      if (this.isListening) {
-        console.warn('[Gemini STT] タイムアウトにより強制停止');
-        this.stopListening();
-      }
-    }, 30000);
+    this._resetRecognitionTimer();
   }
 
   _stopGemini() {
@@ -312,6 +312,11 @@ export class SpeechManager {
     if (!this._recognition) return;
     this._recognition.start();
     this.isListening = true;
+    this._resetRecognitionTimer();
+  }
+
+  /** タイマーを30秒にリセットする */
+  _resetRecognitionTimer() {
     clearTimeout(this._recognitionTimer);
     this._recognitionTimer = setTimeout(() => {
       if (this.isListening) {

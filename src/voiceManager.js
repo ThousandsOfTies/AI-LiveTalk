@@ -166,10 +166,14 @@ function _registerListeners() {
 
     // 通常のクリック：録音の開始/停止、またはラリーモードの終了
     if (_speech.isListening) {
-      _speech.stopListening();
+      if (_rallyMode) {
+        _toggleRallyMode(); // ラリーモード中なら即座に停止＋解除
+      } else {
+        _speech.stopListening();
+      }
     } else {
       if (_rallyMode) {
-        _toggleRallyMode(); // ラリーモード中ならラリーを終了
+        _toggleRallyMode(); // 待機中ならラリーを終了
       } else {
         startListeningOnce().catch(console.error);
       }

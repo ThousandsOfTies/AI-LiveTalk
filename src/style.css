@@ -256,7 +256,7 @@ body {
 
 #mic-btn {
   background: #191930;
-  border: 1px solid #2a2a48;
+  border: 1.5px solid #4a4a6a; /* 少し明るくして視認性を向上 */
   color: #aaa;
   padding: 0;
   width: 40px;
@@ -291,13 +291,14 @@ body {
 #mic-btn.active {
   background: #c0392b;
   border-color: #e74c3c;
+  border-style: solid; /* 録音中は実線で塗りつぶし感を強調 */
   color: #fff;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 /* 会話モード (TTS終了後に自動でマイクON) */
 #mic-btn.auto-listen {
-  border-color: #e74c3c;
+  border: 4px double #e74c3c; /* 二重線でモードを明示 */
   color: #e74c3c;
 }
 #mic-btn.auto-listen:not(.active) {
