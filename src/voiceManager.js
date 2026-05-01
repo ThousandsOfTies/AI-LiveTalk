@@ -47,6 +47,13 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage }) 
 
   _registerListeners();
   _updateUI();
+
+  // 送信ボタンが押されたら、もし録音中なら停止させる（送信処理自体は chatManager 側で行われる）
+  _sendBtn.addEventListener('click', () => {
+    if (_speech.isListening) {
+      _speech.stopListening();
+    }
+  });
 }
 
 /** 現在のステート（ラリー・発話・録音）に基づいてUIを一括更新する */
@@ -109,12 +116,8 @@ export async function startListeningOnce() {
 
   _speech.onTranscript = (text) => {
     _receivedTranscript = true;
-    if (_rallyMode) {
+    if (text.trim()) {
       _sendMessage(text);
-    } else if (chatInput) {
-      chatInput.value = text;
-      chatInput.dispatchEvent(new Event('input'));
-      chatInput.focus();
     }
     _updateUI();
   };
