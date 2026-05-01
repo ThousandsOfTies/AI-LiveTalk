@@ -447,8 +447,10 @@ export class SpeechManager {
   async unlockAudio() {
     // <audio> のアンロック
     const dummy = new Audio();
+    // 無音の短いWAVデータ
+    dummy.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFRm10IBAAAAABAAEAIlYAAClWAAACABAAZGF0YQAAAAA=';
     dummy.volume = 0;
-    await dummy.play().catch(() => {}); // 失敗しても OK（権限の取得が目的）
+    await dummy.play().catch(() => {}); // src があれば即座に解決/拒否される
 
     // ブラウザ TTS フォールバック用の SpeechSynthesis アンロック
     if (!this._useAivis && !this._useCloud && 'speechSynthesis' in window) {
