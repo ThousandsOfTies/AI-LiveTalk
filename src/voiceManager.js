@@ -1,122 +1,137 @@
 import { setStatus } from './uiUtils.js';
 import { setOnPipelineEnd } from './chatManager.js';
 
-let _speech, _llm, _micBtn, _sendMessage;
-let autoListenMode    = false;
+let _speech, _llm, _micBtn, _sendBtn, _sendMessage;
+let _rallyMode        = false; // ラリーモード（自動会話）のON/OFF
 let _longPressTimer   = null;
 let _longPressTriggered = false;
-let _pendingStartListening = false;
 
-export function initVoiceManager({ speech, llm, micBtn, sendMessage }) {
+export function initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage }) {
   _speech      = speech;
   _llm         = llm;
   _micBtn      = micBtn;
+  _sendBtn     = sendBtn;
   _sendMessage = sendMessage;
 
   if (!speech.sttSupported) {
-    micBtn.disabled = true;
-    micBtn.title    = 'このブラウザは音声認識に非対応です';
+    _micBtn.disabled = true;
+    _micBtn.title    = 'このブラウザは音声認識に非対応です';
   }
 
-  // 会話モード: TTS終了後に自動でマイクON
+  // 会話パイプライン終了（AIの思考とTTS生成が全て終わったタイミング）
   setOnPipelineEnd(() => {
-    if (autoListenMode && !_speech.isListening) {
+    // ラリーモード中かつAIが喋り終えていたら、録音を開始
+    if (_rallyMode && !_speech.isSpeaking && !_speech.isListening) {
       startListeningOnce();
     }
   });
 
-  // TTS 再生終了時の処理
-  const originalOnSpeechEnd = _speech.onSpeechEnd;
-  _speech.onSpeechEnd = () => {
-    originalOnSpeechEnd?.();
-    if (_pendingStartListening) {
-      console.log('[VoiceManager] AI の発話が終了したので予約されていたマイクを開始します');
-      _pendingStartListening = false;
-      startListeningOnce();
-    }
+  // TTS 再生開始時の処理
+  _speech.onSpeechStart = () => {
+    _updateUI();
   };
 
-  speech.onNoiseModeChange = (isNoisy) => {
-    micBtn.classList.toggle('noisy-mode', isNoisy);
-    micBtn.textContent = isNoisy ? '✦' : '🎤';
-    micBtn.title = isNoisy
-      ? 'Gemini 音声認識（騒音モード自動切替中）'
-      : '音声入力 (クリックで開始/停止)';
+  // TTS 再生終了時の処理
+  _speech.onSpeechEnd = () => {
+    // ラリーモード中であれば、発話終了後に自動で録音を開始
+    if (_rallyMode && !_speech.isListening) {
+      startListeningOnce();
+    }
+    _updateUI();
+  };
+
+  _speech.onNoiseModeChange = () => {
+    _updateUI();
   };
 
   _registerListeners();
+  _updateUI();
+}
+
+/** 現在のステート（ラリー・発話・録音）に基づいてUIを一括更新する */
+function _updateUI() {
+  const isListening = _speech.isListening;
+  const isSpeaking  = _speech.isSpeaking;
+
+  // マイクボタンのクラス
+  _micBtn.classList.toggle('active', isListening);
+  _micBtn.classList.toggle('auto-listen', _rallyMode);
+
+  // アイコン切り替え
+  if (isListening) {
+    _micBtn.textContent = _speech.isNoisy ? '✦' : '🎤';
+  } else {
+    // 非録音中。ラリーモードなら専用アイコン、通常ならマイク
+    _micBtn.textContent = _rallyMode ? '💬' : '🎤';
+  }
+
+  // ボタンの有効・無効（AI発話中は入力を一切受け付けない）
+  _micBtn.disabled  = isSpeaking;
+  _sendBtn.disabled = isSpeaking;
+
+  // ステータス・タイトル
+  if (isListening) {
+    setStatus(_speech.isNoisy ? '✦ 高精度認識中...' : '🎤 聞いています...');
+    _micBtn.title = '音声入力中 (クリックで停止)';
+  } else if (isSpeaking) {
+    setStatus('AI 発話中...');
+    _micBtn.title = 'AI発話中 (操作不可)';
+  } else if (_rallyMode) {
+    setStatus('会話モード ON');
+    _micBtn.title = '会話モード中 (長押しで終了)';
+  } else {
+    setStatus('');
+    _micBtn.title = '音声入力 (クリックで開始/停止)';
+  }
+
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) chatInput.classList.toggle('recording', isListening);
 }
 
 export async function startListeningOnce() {
-  // TTS 再生中なら予約だけして終了する（エコーバック防止）
-  if (_speech.isSpeaking) {
-    console.log('[VoiceManager] AI が発話中のためマイク開始を予約します');
-    _pendingStartListening = true;
-    setStatus('AI 発話終了まで待機中...');
-    return;
-  }
+  // AIが喋っている間は、録音を開始しない
+  if (_speech.isSpeaking) return;
 
   _speech.setLang(_llm.ttsLang);
   await _speech.startListening();
-  _micBtn.classList.add('active');
-  setStatus(_speech.isNoisy ? '✦ 高精度認識中...' : '🎤 聞いています...');
+  _updateUI();
 
   const chatInput = document.getElementById('chat-input');
-  chatInput.classList.add('recording');
-
   _speech.onInterimTranscript = (text) => {
-    chatInput.value = text;
-    chatInput.dispatchEvent(new Event('input'));
+    if (chatInput) {
+      chatInput.value = text;
+      chatInput.dispatchEvent(new Event('input'));
+    }
   };
 
   _speech.onTranscript = (text) => {
-    _micBtn.classList.remove('active');
-    if (autoListenMode) {
-      chatInput.classList.remove('recording');
+    if (_rallyMode) {
       _sendMessage(text);
-    } else {
+    } else if (chatInput) {
       chatInput.value = text;
       chatInput.dispatchEvent(new Event('input'));
       chatInput.focus();
-      setStatus('');
-      // .recording を維持してユーザーが全文を確認できる状態に
     }
+    _updateUI();
   };
 
   _speech.onListeningEnd = () => {
-    _micBtn.classList.remove('active');
-    chatInput.classList.remove('recording');
-    if (autoListenMode && !chatInput.disabled) {
-      startListeningOnce();
-    } else if (!autoListenMode) {
-      setStatus('');
-    }
+    _updateUI();
   };
 }
 
-async function _enterAutoListen() {
-  autoListenMode = true;
-  _micBtn.classList.add('auto-listen');
-  _micBtn.title = '会話モード中 (長押しで終了)';
-  setStatus('会話モード ON');
-  const chatInput = document.getElementById('chat-input');
-  if (!_speech.isListening && !chatInput.disabled) {
-    await startListeningOnce();
+async function _toggleRallyMode() {
+  _rallyMode = !_rallyMode;
+  if (_rallyMode) {
+    if (!_speech.isListening && !_speech.isSpeaking) {
+      await startListeningOnce();
+    }
+  } else {
+    if (_speech.isListening) {
+      _speech.stopListening();
+    }
   }
-}
-
-function _exitAutoListen() {
-  autoListenMode = false;
-  _pendingStartListening = false;
-  _micBtn.classList.remove('auto-listen');
-  _micBtn.title = _speech.isNoisy
-    ? 'Gemini 音声認識（騒音モード自動切替中）'
-    : '音声入力 (クリックで開始/停止)';
-  if (_speech.isListening) {
-    _speech.stopListening();
-    _micBtn.classList.remove('active');
-  }
-  setStatus('');
+  _updateUI();
 }
 
 function _registerListeners() {
@@ -132,30 +147,25 @@ function _registerListeners() {
     _longPressTimer = setTimeout(() => {
       _longPressTimer     = null;
       _longPressTriggered = true;
-      if (autoListenMode) _exitAutoListen();
-      else _enterAutoListen();
+      _toggleRallyMode();
     }, 600);
   });
 
   _micBtn.addEventListener('pointerup', () => {
     if (_longPressTimer !== null) { clearTimeout(_longPressTimer); _longPressTimer = null; }
     if (_longPressTriggered) return;
-    if (autoListenMode) { _exitAutoListen(); return; }
 
-    // もし予約中だった場合は予約を解除する（クリックでマイクをキャンセルしたい場合）
-    if (_pendingStartListening) {
-      _pendingStartListening = false;
-      setStatus('');
-      return;
-    }
-
+    // 通常のクリック：録音の開始/停止、またはラリーモードの終了
     if (_speech.isListening) {
       _speech.stopListening();
-      _micBtn.classList.remove('active');
-      setStatus('');
-      return;
+    } else {
+      if (_rallyMode) {
+        _toggleRallyMode(); // ラリーモード中ならラリーを終了
+      } else {
+        startListeningOnce().catch(console.error);
+      }
     }
-    startListeningOnce().catch(console.error);
+    _updateUI();
   });
 
   _micBtn.addEventListener('pointerleave', () => {

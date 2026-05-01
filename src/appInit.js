@@ -34,7 +34,7 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
     scheduleHistorySave, getVrmaEmotionMap, resolveVrmaUrl,
   });
 
-  initVoiceManager({ speech, llm, micBtn, sendMessage });
+  initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage });
 
   initSettingsManager({ viewer, llm, speech, driveSync, storage });
 
