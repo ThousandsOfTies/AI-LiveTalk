@@ -256,7 +256,7 @@ export class SpeechManager {
         console.warn('[Gemini STT] タイムアウトにより強制停止');
         this.stopListening();
       }
-    }, 15000);
+    }, 30000);
   }
 
   _stopGemini() {
@@ -318,7 +318,7 @@ export class SpeechManager {
         console.warn('[STT] 無音タイムアウトにより強制終了');
         this.stopListening();
       }
-    }, 15000);
+    }, 30000);
   }
 
   stopListening() {

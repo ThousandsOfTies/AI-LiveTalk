@@ -5,6 +5,7 @@ let _speech, _llm, _micBtn, _sendBtn, _sendMessage;
 let _rallyMode        = false; // ラリーモード（自動会話）のON/OFF
 let _longPressTimer   = null;
 let _longPressTriggered = false;
+let _receivedTranscript = false; // 今回の録音で文字が認識されたか
 
 export function initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage }) {
   _speech      = speech;
@@ -56,6 +57,7 @@ function _updateUI() {
   // マイクボタンのクラス
   _micBtn.classList.toggle('active', isListening);
   _micBtn.classList.toggle('auto-listen', _rallyMode);
+  _micBtn.classList.toggle('noisy-mode', _speech.isNoisy);
 
   // アイコン切り替え
   if (isListening) {
@@ -92,6 +94,7 @@ export async function startListeningOnce() {
   // AIが喋っている間は、録音を開始しない
   if (_speech.isSpeaking) return;
 
+  _receivedTranscript = false;
   _speech.setLang(_llm.ttsLang);
   await _speech.startListening();
   _updateUI();
@@ -105,6 +108,7 @@ export async function startListeningOnce() {
   };
 
   _speech.onTranscript = (text) => {
+    _receivedTranscript = true;
     if (_rallyMode) {
       _sendMessage(text);
     } else if (chatInput) {
@@ -116,6 +120,11 @@ export async function startListeningOnce() {
   };
 
   _speech.onListeningEnd = () => {
+    // 録音終了時、一度も文字が認識されていなければ（＝タイムアウトなど）、ラリーモードを解除する
+    if (!_receivedTranscript && _rallyMode) {
+      console.log('[VoiceManager] 無音タイムアウトのためラリーモードを終了します');
+      _rallyMode = false;
+    }
     _updateUI();
   };
 }
