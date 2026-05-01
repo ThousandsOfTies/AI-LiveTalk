@@ -24,9 +24,11 @@ export function initPlatformUtils({ viewer }) {
   // Resize
   window.addEventListener('resize', () => _viewer.resize());
 
-  // モバイル: キーボード表示時にビューアを非表示にしてレイアウト崩れを防ぐ
+  // モバイル: キーボード表示時にビューアを非表示にし、visualViewport でレイアウト高さを調整する
   const chatInput   = document.getElementById('chat-input');
   const viewerPanel = document.getElementById('viewer-panel');
+  const appEl       = document.getElementById('app');
+
   if (navigator.maxTouchPoints > 0) {
     chatInput.addEventListener('focus', () => {
       viewerPanel.style.display = 'none';
@@ -37,11 +39,10 @@ export function initPlatformUtils({ viewer }) {
         chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
       setTimeout(() => {
         viewerPanel.style.display = '';
+        appEl.style.height = '';
         _viewer.resize();
         window.scrollTo(0, 0);
         document.body.scrollTop = 0;
-        // iOS Safari は window.scrollTo() 後に非同期でスクロール位置をリセットするため
-        // requestAnimationFrame で次フレームまで遅延させてから復元する
         requestAnimationFrame(() => {
           if (distanceFromBottom < 80) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -52,6 +53,16 @@ export function initPlatformUtils({ viewer }) {
         });
       }, 300);
     });
+
+    // visualViewport API でキーボード高さを検出し、#app の高さを視覚的なビューポートに合わせる
+    // iOS Safari では position:fixed でもキーボードがコンテンツを覆う場合があるため
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (document.activeElement === chatInput) {
+          appEl.style.height = window.visualViewport.height + 'px';
+        }
+      });
+    }
   }
 }
 

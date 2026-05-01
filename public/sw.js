@@ -1,13 +1,14 @@
 // VRLLM Service Worker
 // 戦略: 同一オリジンの静的アセットはキャッシュ優先で返し、バックグラウンドで更新
-const CACHE = 'vrllm-v2';
+const CACHE = 'vrllm-v3';
 
 self.addEventListener('install', (e) => {
-  // アプリシェルを即座にキャッシュ
+  // skipWaiting を先に呼び、キャッシュ失敗があっても必ず新SWに切り替わるようにする
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(['./', './index.html']))
-      .then(() => self.skipWaiting())
+      .catch(() => {}) // キャッシュ失敗はインストールをブロックしない
   );
 });
 
