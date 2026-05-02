@@ -352,10 +352,12 @@ function _cancelSettings() {
   _viewer.setVRMAChestCorrection(d.chestCorrection);
 }
 
-function _clearHistory() {
+async function _clearHistory() {
   _llm.clearHistory();
   document.getElementById('chat-messages').innerHTML = '';
   cancelAutoSave();
+  // ストレージにも空履歴を書き込む（再起動後の復元を防ぐ）
+  await _storage.saveHistory([]).catch(err => console.warn('履歴クリア保存失敗:', err));
   setStatus('会話履歴をクリアしました');
   document.getElementById('settings-panel').classList.add('hidden');
 }
