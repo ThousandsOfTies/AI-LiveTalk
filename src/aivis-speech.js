@@ -84,25 +84,13 @@ export class AivisSpeechClient extends BaseClient {
     this.mimeType  = 'audio/wav';
   }
 
-  /** URL に応じて必要なヘッダーを生成する */
-  getHeaders() {
-    const headers = {};
-    if (this.baseUrl.includes('ngrok')) {
-      headers['ngrok-skip-browser-warning'] = 'any';
-    }
-    return headers;
-  }
-
   /**
    * AivisSpeech エンジンが起動しているか確認する
    * @returns {Promise<boolean>}
    */
   async isAvailable() {
     try {
-      const res = await fetch(`${this.baseUrl}/version`, {
-        signal: AbortSignal.timeout(2000),
-        headers: this.getHeaders()
-      });
+      const res = await fetch(`${this.baseUrl}/version`, { signal: AbortSignal.timeout(2000) });
       return res.ok;
     } catch {
       return false;
@@ -115,14 +103,9 @@ export class AivisSpeechClient extends BaseClient {
    * @returns {Promise<ArrayBuffer>}
    */
   async synthesize(text) {
-    const headers = this.getHeaders();
-
     const queryRes = await fetch(
       `${this.baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${this.speakerId}`,
-      {
-        method: 'POST',
-        headers
-      }
+      { method: 'POST' }
     );
     if (!queryRes.ok) throw new Error(`audio_query エラー: ${queryRes.status}`);
     const query = await queryRes.json();
@@ -131,10 +114,7 @@ export class AivisSpeechClient extends BaseClient {
       `${this.baseUrl}/synthesis?speaker=${this.speakerId}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(query),
       }
     );
