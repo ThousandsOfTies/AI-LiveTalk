@@ -84,19 +84,24 @@ export class AivisSpeechClient extends BaseClient {
     this.mimeType  = 'audio/wav';
   }
 
+  /** URL に応じて必要なヘッダーを生成する */
+  getHeaders() {
+    const headers = {};
+    if (this.baseUrl.includes('ngrok')) {
+      headers['ngrok-skip-browser-warning'] = 'any';
+    }
+    return headers;
+  }
+
   /**
    * AivisSpeech エンジンが起動しているか確認する
    * @returns {Promise<boolean>}
    */
   async isAvailable() {
     try {
-      const headers = {};
-      if (this.baseUrl.includes('ngrok')) {
-        headers['ngrok-skip-browser-warning'] = 'any';
-      }
       const res = await fetch(`${this.baseUrl}/version`, {
         signal: AbortSignal.timeout(2000),
-        headers
+        headers: this.getHeaders()
       });
       return res.ok;
     } catch {
@@ -110,10 +115,7 @@ export class AivisSpeechClient extends BaseClient {
    * @returns {Promise<ArrayBuffer>}
    */
   async synthesize(text) {
-    const headers = {};
-    if (this.baseUrl.includes('ngrok')) {
-      headers['ngrok-skip-browser-warning'] = 'any';
-    }
+    const headers = this.getHeaders();
 
     const queryRes = await fetch(
       `${this.baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${this.speakerId}`,

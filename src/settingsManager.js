@@ -312,7 +312,9 @@ async function _checkAivis() {
   statusEl2.textContent = '確認中...';
 
   try {
-    const res = await fetch(`${url.replace(/\/$/, '')}/speakers`);
+    const res = await fetch(`${url.replace(/\/$/, '')}/speakers`, {
+      headers: _speech._aivis.getHeaders()
+    });
     if (!res.ok) throw new Error();
     const speakers = await res.json();
 
