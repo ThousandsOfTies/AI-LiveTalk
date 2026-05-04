@@ -37,6 +37,32 @@ VRM キャラクターと LLM を組み合わせた 3D AI アシスタント Web
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
 | Ollama (ローカル) | `http://localhost:11434/v1` | `llama3.2` など |
 
+## 音声合成 (AivisSpeech) の連携
+
+AI-LiveTalk はローカルで動作する [AivisSpeech](https://aivis-project.com/) と連携して、高品質な日本語音声を再生できます。
+
+### 1. AivisSpeech の準備
+AivisSpeech Engine をインストールし、本リポジトリに含まれる以下のバッチファイルを使用して起動してください。
+
+- **`start_aivis_local.bat`** — 同じ PC のブラウザから利用する場合。
+- **`start_aivis_with_tunnel.bat`** — スマートフォンなどの外部ネットワークから利用する場合（トンネル機能）。
+
+### 2. スマートフォンからの利用 (外部公開)
+`start_aivis_with_tunnel.bat` を実行すると、トンネル方式を選択できます。
+
+- **localhost.run** (推奨): アカウント不要で即座に HTTPS URL が発行されます。
+- **Pinggy**: SSH を利用した代替手段です。
+- **Cloudflare**: `cloudflared` がインストールされている場合に使用可能です。
+
+発行された URL（例: `https://xxxx.lhr.life`）を、アプリの **設定 > 音声タブ > AivisSpeech URL** に貼り付けて保存してください。
+
+#### 自動起動設定
+引数として番号を指定すると、メニューをスキップして自動起動できます。
+```powershell
+# localhost.run で自動起動する場合
+.\start_aivis_with_tunnel.bat 1
+```
+
 ## ローカル開発
 
 ```bash

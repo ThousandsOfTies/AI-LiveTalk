@@ -90,7 +90,14 @@ export class AivisSpeechClient extends BaseClient {
    */
   async isAvailable() {
     try {
-      const res = await fetch(`${this.baseUrl}/version`, { signal: AbortSignal.timeout(2000) });
+      const headers = {};
+      if (this.baseUrl.includes('ngrok')) {
+        headers['ngrok-skip-browser-warning'] = 'any';
+      }
+      const res = await fetch(`${this.baseUrl}/version`, {
+        signal: AbortSignal.timeout(2000),
+        headers
+      });
       return res.ok;
     } catch {
       return false;
@@ -103,9 +110,17 @@ export class AivisSpeechClient extends BaseClient {
    * @returns {Promise<ArrayBuffer>}
    */
   async synthesize(text) {
+    const headers = {};
+    if (this.baseUrl.includes('ngrok')) {
+      headers['ngrok-skip-browser-warning'] = 'any';
+    }
+
     const queryRes = await fetch(
       `${this.baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${this.speakerId}`,
-      { method: 'POST' }
+      {
+        method: 'POST',
+        headers
+      }
     );
     if (!queryRes.ok) throw new Error(`audio_query エラー: ${queryRes.status}`);
     const query = await queryRes.json();
@@ -114,7 +129,10 @@ export class AivisSpeechClient extends BaseClient {
       `${this.baseUrl}/synthesis?speaker=${this.speakerId}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
         body: JSON.stringify(query),
       }
     );
