@@ -3,6 +3,7 @@ import {
   appendMessage, setStatus, setInputEnabled,
   isNearBottom, scrollToBottom, autoResizeTextarea,
 } from './uiUtils.js';
+import { getPersonaData } from './personaManager.js';
 
 let _viewer, _llm, _speech, _lipSync, _driveSync;
 let _scheduleHistorySave, _getVrmaEmotionMap, _resolveVrmaUrl;
@@ -10,6 +11,9 @@ let _chatInput;
 let _activePipeline      = null;
 let _autoSaveProfileTimer = null;
 let _onPipelineEnd        = null;
+let _proactiveTimer       = null;
+
+const PROACTIVE_INTERVAL = 300000; // 5分（沈黙とみなす時間）
 
 export function initChatManager({
   viewer, llm, speech, lipSync, driveSync,
@@ -62,15 +66,56 @@ export function initChatManager({
     }
   });
   _chatInput.addEventListener('input', autoResizeTextarea);
+
+  // 初期タイマー開始
+  resetProactiveTimer();
+}
+
+/** 自発モード用のタイマーをリセットする */
+export function resetProactiveTimer() {
+  clearTimeout(_proactiveTimer);
+  _proactiveTimer = setTimeout(() => {
+    triggerProactiveTalk();
+  }, PROACTIVE_INTERVAL);
+}
+
+/** 自発的に話しかける */
+async function triggerProactiveTalk() {
+  const data = getPersonaData();
+  if (!data.isProactive) {
+    resetProactiveTimer(); // OFFでもタイマーだけは回しておく（ONにした時にすぐ反応できるように）
+    return;
+  }
+
+  // 誰かが入力中、またはAIが既に喋っている場合はスキップ
+  if (_activePipeline || _chatInput.value.trim()) {
+    resetProactiveTimer();
+    return;
+  }
+
+  console.log('🗣 自発モード: 話しかけを開始します...');
+  // ユーザーには見えない「システム的な促し」を LLM に送る
+  const systemPrompt = "(ユーザーがしばらく沈黙しています。あなたから自然に、短く日本語で話しかけてください。沈黙していたことには触れず、今の状況や軽い世間話、あるいは自分の考えなどを共有してください。)";
+  
+  try {
+    await sendMessage(systemPrompt, { isSystem: true });
+  } catch (err) {
+    console.warn('自発的な話しかけに失敗:', err);
+    resetProactiveTimer();
+  }
 }
 
 export function setOnPipelineEnd(cb) {
   _onPipelineEnd = cb;
 }
 
-export async function sendMessage(text) {
+export async function sendMessage(text, options = {}) {
+  const isSystem = options.isSystem || false;
   text = text.trim();
   if (!text) return;
+
+  // 会話があったのでタイマーリセット
+  resetProactiveTimer();
 
   // iOS Safari の自動再生ブロック回避のため、ユーザージェスチャー直後に AudioContext を解禁
   await _speech.unlockAudio();
@@ -79,7 +124,9 @@ export async function sendMessage(text) {
   _chatInput.value = '';
   autoResizeTextarea();
 
-  appendMessage('user', text, true);
+  if (!isSystem) {
+    appendMessage('user', text, true);
+  }
 
   if (!_llm.apiKey) {
     const msg = 'APIキーがまだ設定されていないみたい。右上の設定ボタンから、LLMタブでAPIキーを入れてね！';

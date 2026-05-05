@@ -13,6 +13,7 @@ const _defaults = {
     armCorrection:      0,
     shoulderCorrection: 0,
     chestCorrection:    0,
+    isProactive:        false,
     motionMap: {
       neutral:   'vrma/female/neutral.vrma',
       happy:     'vrma/female/happy.vrma',
@@ -31,6 +32,7 @@ const _defaults = {
     armCorrection:      0,
     shoulderCorrection: 0,
     chestCorrection:    0,
+    isProactive:        false,
     motionMap: {
       neutral:   'vrma/male/neutral.vrma',
       happy:     'vrma/male/happy.vrma',

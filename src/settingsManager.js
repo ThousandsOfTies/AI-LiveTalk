@@ -237,6 +237,9 @@ export function refreshSettingsPanel() {
 
   document.getElementById('setting-user-profile').value =
     _llm.userProfile ? _llm.userProfile.join('\n') : '';
+
+  const proactiveChk = document.getElementById('setting-proactive-mode');
+  if (proactiveChk) proactiveChk.checked = d.isProactive || false;
 }
 
 // ---- Private handlers ----
@@ -273,10 +276,11 @@ function _saveSettingsHandler() {
   _viewer.setVRMAChestCorrection(chestCorrection);
   updatePersonaData(getCurrentPersona(), { armCorrection, shoulderCorrection, chestCorrection });
 
-  const url       = document.getElementById('setting-aivis-url').value.trim();
-  const speakerId = document.getElementById('setting-aivis-speaker').value.trim();
+  const url           = document.getElementById('setting-aivis-url').value.trim();
+  const speakerId     = document.getElementById('setting-aivis-speaker').value.trim();
+  const proactiveMode = document.getElementById('setting-proactive-mode').checked;
   _speech.updateAivisSettings(url, speakerId);
-  updatePersonaData(getCurrentPersona(), { speakerId });
+  updatePersonaData(getCurrentPersona(), { speakerId, isProactive: proactiveMode });
 
   const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
   const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
