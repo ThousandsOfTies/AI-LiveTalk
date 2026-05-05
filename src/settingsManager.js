@@ -278,7 +278,7 @@ function _saveSettingsHandler() {
 
   const url           = document.getElementById('setting-aivis-url').value.trim();
   const speakerId     = document.getElementById('setting-aivis-speaker').value.trim();
-  const proactiveMode = document.getElementById('setting-proactive-mode').checked;
+  const proactiveMode = document.getElementById('setting-proactive-mode')?.checked ?? false;
   _speech.updateAivisSettings(url, speakerId);
   updatePersonaData(getCurrentPersona(), { speakerId, isProactive: proactiveMode });
 
