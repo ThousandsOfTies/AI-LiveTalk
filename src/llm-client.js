@@ -77,20 +77,31 @@ export class LLMClient {
   /**
    * ストリームチャット。AsyncGenerator で差分テキストを yield する。
    * @param {string} userMessage
+   * @param {string|null} imageBase64 - JPEG base64（画像付き送信時のみ）
    * @yields {string} テキストの差分チャンク
    */
-  async *chat(userMessage) {
-    this.history.push({ role: 'user', content: userMessage });
+  async *chat(userMessage, imageBase64 = null) {
+    const textMsg = userMessage || (imageBase64 ? 'この画像について教えて' : '');
+    // 履歴にはテキストのみ保存（画像は毎回送ると高コストなため）
+    this.history.push({ role: 'user', content: textMsg });
 
-    const profileContext = this.userProfile && this.userProfile.length > 0 
+    const profileContext = this.userProfile && this.userProfile.length > 0
       ? `\n\n【これまでの分析で判明しているユーザーの特徴】\n- ` + this.userProfile.join(`\n- `)
       : '';
+
+    const currentUserContent = imageBase64
+      ? [
+          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+          { type: 'text', text: textMsg },
+        ]
+      : textMsg;
 
     const body = {
       model: this.model,
       messages: [
         { role: 'system', content: this.systemPrompt + (this.locationContext ? '\n\n' + this.locationContext : '') + profileContext + EMOTION_INSTRUCTION },
-        ...this.history, // リミッターを解除し全履歴を送信（超大容量コンテキストを活用）
+        ...this.history.slice(0, -1), // 過去の履歴
+        { role: 'user', content: currentUserContent }, // 現在のメッセージ（画像付き可）
       ],
       stream: true,
     };

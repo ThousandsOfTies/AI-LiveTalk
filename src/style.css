@@ -197,6 +197,7 @@ body {
 
 /* ---- 入力エリア ---- */
 #chat-input-area {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 12px;
@@ -204,6 +205,45 @@ body {
   border-top: 1px solid #1e1e36;
   align-items: flex-end;
   flex-shrink: 0;
+}
+
+#input-mode-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 12px;
+  background: #1a1a30;
+  border: 1px solid #2a2a48;
+  border-radius: 14px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+#input-mode-picker.hidden { display: none; }
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: #c0c0d8;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+.mode-option:hover { background: rgba(108, 99, 255, 0.15); }
+.mode-option.active {
+  background: rgba(108, 99, 255, 0.25);
+  color: #b8b0ff;
+  font-weight: 600;
 }
 
 #chat-input {
@@ -254,6 +294,26 @@ body {
   border: 1px solid rgba(255,255,255,0.05);
 }
 
+#stop-btn {
+  background: #191930;
+  border: 1.5px solid #4a4a6a;
+  color: #e0e0f0;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  transition: background 0.15s, border-color 0.15s;
+}
+#stop-btn:hover { background: #252540; border-color: #6a6a8a; }
+#stop-btn:active { background: #2a2a48; }
+#stop-btn.hidden { display: none; }
+
 #mic-btn {
   background: #191930;
   border: 1.5px solid #4a4a6a; /* 少し明るくして視認性を向上 */
@@ -289,10 +349,9 @@ body {
 }
 
 #mic-btn.active {
-  background: #c0392b;
+  background: rgba(192, 57, 43, 0.35);
   border-color: #e74c3c;
-  border-style: solid; /* 録音中は実線で塗りつぶし感を強調 */
-  color: #fff;
+  border-style: solid;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -700,6 +759,106 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #2a2a48; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #3a3a60; }
+
+/* ---- カメラ機能 ---- */
+#camera-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+#camera-overlay.hidden { display: none; }
+
+#camera-preview {
+  width: 100%;
+  max-height: calc(100dvh - 90px);
+  object-fit: contain;
+}
+
+#camera-actions {
+  display: flex;
+  gap: 16px;
+  padding: 16px 24px;
+  width: 100%;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+#camera-capture-btn {
+  background: #6c63ff;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 28px;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+#camera-capture-btn:active { background: #574fd6; }
+
+#camera-cancel-btn {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ccc;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-size: 15px;
+  cursor: pointer;
+}
+#camera-cancel-btn:active { background: rgba(255, 255, 255, 0.2); }
+
+#camera-preview-thumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin: 0 8px 4px;
+  background: rgba(108, 99, 255, 0.12);
+  border: 1px solid rgba(108, 99, 255, 0.3);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+#camera-preview-thumb.hidden { display: none; }
+
+#camera-thumb-img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.camera-thumb-label {
+  font-size: 12px;
+  color: #aaa;
+  flex: 1;
+}
+
+#camera-thumb-clear {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  line-height: 1;
+}
+#camera-thumb-clear:hover { color: #ccc; }
+
+.message-image {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: block;
+  object-fit: contain;
+}
 
 /* ---- モバイル対応 ---- */
 @media (max-width: 640px) {

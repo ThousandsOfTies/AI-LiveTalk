@@ -21,6 +21,7 @@
       <!-- iOS WebKit は display:none な file input への programmatic click を無視するため CSS で非表示にする -->
       <input type="file" id="vrm-file-input" accept=".vrm" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
       <input type="file" id="vrma-file-input" accept=".vrma" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
+      <input type="file" id="gallery-input" accept="image/*" style="position:absolute;width:0;height:0;opacity:0;overflow:hidden;">
       <div id="viewer-controls">
         <button id="load-vrma-btn" title="選択中の感情スロットにVRMAを上書きロード">🎬 VRMA</button>
         <select id="vrma-preset-select" title="感情モーションスロットを選択">
@@ -60,10 +61,51 @@
 
       <div id="chat-messages"></div>
 
+      <div id="camera-preview-thumb" class="hidden">
+        <img id="camera-thumb-img" src="" alt="撮影した画像">
+        <span class="camera-thumb-label">画像を送信します</span>
+        <button id="camera-thumb-clear">✕</button>
+      </div>
+
       <div id="chat-input-area">
-        <button id="mic-btn" title="音声入力 (クリックで開始/停止)">🎤</button>
+        <div id="input-mode-picker" class="hidden">
+          <button class="mode-option" data-mode="mic">
+            <svg viewBox="0 0 24 24" width="18" height="18" style="flex-shrink:0"><circle cx="12" cy="12" r="8" fill="#e74c3c"/></svg>
+            <span>ワンショット</span>
+          </button>
+          <button class="mode-option" data-mode="rally">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="flex-shrink:0"><circle cx="12" cy="12" r="6" fill="#e74c3c"/><path d="M12 3 A9 9 0 1 1 4.21 7.5" stroke="#e74c3c" stroke-width="2.2" stroke-linecap="round"/><polygon points="6,4.5 7.2,9.25 1.2,5.75" fill="#e74c3c"/></svg>
+            <span>ラリーモード</span>
+          </button>
+          <button class="mode-option" data-mode="camera">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="flex-shrink:0"><rect x="1.5" y="5" width="21" height="14" rx="3" fill="#2a2a3a" stroke="#999" stroke-width="1.5"/><circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="2"/><circle cx="12" cy="12" r="1.5" fill="white"/></svg>
+            <span>カメラ</span>
+          </button>
+          <button class="mode-option" data-mode="gallery">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" style="flex-shrink:0"><rect x="2" y="4.5" width="20" height="15" rx="2.5" fill="#1e1e38" stroke="#aaa" stroke-width="1.6"/><circle cx="7.5" cy="9.5" r="2" fill="#aaa"/><path d="M2 16.5 L8.5 10 L13.5 15 L17 11.5 L22 16.5" stroke="#aaa" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <span>ギャラリー</span>
+          </button>
+        </div>
+        <button id="mic-btn" title="音声入力 (長押しでモード切替)">🎤</button>
         <textarea id="chat-input" placeholder="メッセージ入力" rows="1"></textarea>
         <button id="send-btn">送信</button>
+        <button id="stop-btn" class="hidden" title="AIの発話を停止">停止</button>
+      </div>
+    </div>
+
+    <!-- カメラオーバーレイ -->
+    <div id="camera-overlay" class="hidden">
+      <video id="camera-preview" autoplay playsinline muted></video>
+      <div id="camera-actions">
+        <button id="camera-cancel-btn">✕ キャンセル</button>
+        <button id="camera-capture-btn">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" style="pointer-events:none">
+            <rect x="1.5" y="5" width="21" height="14" rx="3" fill="#2a2a3a" stroke="#fff" stroke-width="1.5"/>
+            <circle cx="12" cy="12" r="4.5" stroke="white" stroke-width="2"/>
+            <circle cx="12" cy="12" r="1.5" fill="white"/>
+          </svg>
+          撮影
+        </button>
       </div>
     </div>
 

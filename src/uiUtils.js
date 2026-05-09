@@ -20,12 +20,16 @@ export function initUiUtils({ chatMessages, statusEl, chatInput, sendBtn, micBtn
   _speech = speech;
 }
 
-export function appendMessage(role, text, force = false) {
+export function appendMessage(role, text, force = false, imageBase64 = null) {
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
+  const imageHtml = imageBase64
+    ? `<img src="data:image/jpeg;base64,${imageBase64}" class="message-image" alt="送信画像">`
+    : '';
   wrap.innerHTML = `
     <div class="message-avatar">${getAvatarHtml(role)}</div>
     <div class="message-bubble">
+      ${imageHtml}
       <div class="message-text">${escapeHtml(text)}</div>
     </div>
   `;

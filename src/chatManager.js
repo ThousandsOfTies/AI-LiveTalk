@@ -4,6 +4,7 @@ import {
   isNearBottom, scrollToBottom, autoResizeTextarea,
 } from './uiUtils.js';
 import { getPersonaData } from './personaManager.js';
+import { clearCapture } from './cameraManager.js';
 
 let _viewer, _llm, _speech, _lipSync, _driveSync;
 let _scheduleHistorySave, _getVrmaEmotionMap, _resolveVrmaUrl;
@@ -12,6 +13,11 @@ let _activePipeline      = null;
 let _autoSaveProfileTimer = null;
 let _onPipelineEnd        = null;
 let _proactiveTimer       = null;
+let _pendingImage         = null;
+
+export function setPendingImage(base64) {
+  _pendingImage = base64;
+}
 
 const PROACTIVE_INTERVAL = 300000; // 5分（沈黙とみなす時間）
 
@@ -109,10 +115,28 @@ export function setOnPipelineEnd(cb) {
   _onPipelineEnd = cb;
 }
 
+export function stopPipeline() {
+  if (_activePipeline) {
+    _activePipeline.stop();
+    _activePipeline = null;
+  }
+  _speech.isSpeaking = false;
+  _speech.onSpeechEnd?.();
+  _lipSync.stop();
+  _viewer.stopTalking();
+  _viewer.resetExpressions();
+  setStatus('');
+  setInputEnabled(true);
+  const vrmaMap = _getVrmaEmotionMap();
+  _viewer.loadVRMA(_resolveVrmaUrl(vrmaMap.neutral), { loop: true, isIdle: true }).catch(() => {});
+  if (_onPipelineEnd) _onPipelineEnd();
+}
+
 export async function sendMessage(text, options = {}) {
   const isSystem = options.isSystem || false;
   text = text.trim();
-  if (!text) return;
+  const imageBase64 = _pendingImage;
+  if (!text && !imageBase64) return;
 
   // 会話があったのでタイマーリセット
   resetProactiveTimer();
@@ -124,8 +148,13 @@ export async function sendMessage(text, options = {}) {
   _chatInput.value = '';
   autoResizeTextarea();
 
+  if (imageBase64) {
+    _pendingImage = null;
+    clearCapture();
+  }
+
   if (!isSystem) {
-    appendMessage('user', text, true);
+    appendMessage('user', text, true, imageBase64);
   }
 
   if (!_llm.apiKey) {
@@ -158,11 +187,15 @@ export async function sendMessage(text, options = {}) {
   _activePipeline  = pipeline;
 
   pipeline.onSpeechStart = () => {
+    _speech.isSpeaking = true;
+    _speech.onSpeechStart?.();
     _lipSync.start();
     _viewer.startTalking();
     setStatus('話し中...');
   };
   pipeline.onSpeechEnd = () => {
+    _speech.isSpeaking = false;
+    _speech.onSpeechEnd?.();
     _lipSync.stop();
     _viewer.stopTalking();
     _viewer.resetExpressions();
@@ -177,7 +210,7 @@ export async function sendMessage(text, options = {}) {
   let fullResponse = '';
 
   try {
-    for await (const chunk of _llm.chat(text)) {
+    for await (const chunk of _llm.chat(text, imageBase64)) {
       if (_activePipeline !== pipeline) break;
       const wasNearBottom = isNearBottom();
       fullResponse += chunk;

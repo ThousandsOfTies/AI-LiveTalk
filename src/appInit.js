@@ -3,7 +3,8 @@ import {
   initVRMManager, getAiAvatarUrl, loadInitialVRM,
   getVrmaEmotionMap, resolveVrmaUrl,
 } from './vrmManager.js';
-import { initChatManager, sendMessage } from './chatManager.js';
+import { initChatManager, sendMessage, setPendingImage } from './chatManager.js';
+import { initCameraManager, openCamera, openGallery } from './cameraManager.js';
 import { initVoiceManager } from './voiceManager.js';
 import { initSettingsManager, applySettings, saveSettings } from './settingsManager.js';
 import {
@@ -18,6 +19,7 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
   const statusEl     = document.getElementById('status-indicator');
   const chatInput    = document.getElementById('chat-input');
   const sendBtn      = document.getElementById('send-btn');
+  const stopBtn      = document.getElementById('stop-btn');
   const micBtn       = document.getElementById('mic-btn');
 
   // ---- モジュール初期化 ----
@@ -34,7 +36,9 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
     scheduleHistorySave, getVrmaEmotionMap, resolveVrmaUrl,
   });
 
-  initVoiceManager({ speech, llm, micBtn, sendBtn, sendMessage });
+  initCameraManager({ onCaptureChange: setPendingImage });
+
+  initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMessage, openCamera, openGallery });
 
   initSettingsManager({ viewer, llm, speech, driveSync, storage });
 
