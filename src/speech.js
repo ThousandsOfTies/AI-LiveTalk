@@ -69,6 +69,12 @@ export class SpeechManager {
     this._sharedAudio   = null;
   }
 
+  /** TTS再生状態を更新し、対応するコールバックを発火する */
+  setSpeaking(speaking) {
+    this.isSpeaking = speaking;
+    (speaking ? this.onSpeechStart : this.onSpeechEnd)?.();
+  }
+
   get sttSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
         || !!(navigator.mediaDevices && window.MediaRecorder);

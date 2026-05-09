@@ -3,7 +3,7 @@ import {
   initVRMManager, getAiAvatarUrl, loadInitialVRM,
   getVrmaEmotionMap, resolveVrmaUrl,
 } from './vrmManager.js';
-import { initChatManager, sendMessage, setPendingImage } from './chatManager.js';
+import { initChatManager, sendMessage } from './chatManager.js';
 import { initCameraManager, openCamera, openGallery } from './cameraManager.js';
 import { initVoiceManager } from './voiceManager.js';
 import { initSettingsManager, applySettings, saveSettings } from './settingsManager.js';
@@ -36,7 +36,7 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
     scheduleHistorySave, getVrmaEmotionMap, resolveVrmaUrl,
   });
 
-  initCameraManager({ onCaptureChange: setPendingImage });
+  initCameraManager();
 
   initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMessage, openCamera, openGallery });
 

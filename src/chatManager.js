@@ -4,7 +4,7 @@ import {
   isNearBottom, scrollToBottom, autoResizeTextarea,
 } from './uiUtils.js';
 import { getPersonaData } from './personaManager.js';
-import { clearCapture } from './cameraManager.js';
+import { getCapturedImage, clearCapture } from './cameraManager.js';
 
 let _viewer, _llm, _speech, _lipSync, _driveSync;
 let _scheduleHistorySave, _getVrmaEmotionMap, _resolveVrmaUrl;
@@ -13,11 +13,6 @@ let _activePipeline      = null;
 let _autoSaveProfileTimer = null;
 let _onPipelineEnd        = null;
 let _proactiveTimer       = null;
-let _pendingImage         = null;
-
-export function setPendingImage(base64) {
-  _pendingImage = base64;
-}
 
 const PROACTIVE_INTERVAL = 300000; // 5分（沈黙とみなす時間）
 
@@ -120,8 +115,7 @@ export function stopPipeline() {
     _activePipeline.stop();
     _activePipeline = null;
   }
-  _speech.isSpeaking = false;
-  _speech.onSpeechEnd?.();
+  _speech.setSpeaking(false);
   _lipSync.stop();
   _viewer.stopTalking();
   _viewer.resetExpressions();
@@ -135,7 +129,7 @@ export function stopPipeline() {
 export async function sendMessage(text, options = {}) {
   const isSystem = options.isSystem || false;
   text = text.trim();
-  const imageBase64 = _pendingImage;
+  const imageBase64 = getCapturedImage();
   if (!text && !imageBase64) return;
 
   // 会話があったのでタイマーリセット
@@ -148,10 +142,7 @@ export async function sendMessage(text, options = {}) {
   _chatInput.value = '';
   autoResizeTextarea();
 
-  if (imageBase64) {
-    _pendingImage = null;
-    clearCapture();
-  }
+  if (imageBase64) clearCapture();
 
   if (!isSystem) {
     appendMessage('user', text, true, imageBase64);
@@ -187,15 +178,13 @@ export async function sendMessage(text, options = {}) {
   _activePipeline  = pipeline;
 
   pipeline.onSpeechStart = () => {
-    _speech.isSpeaking = true;
-    _speech.onSpeechStart?.();
+    _speech.setSpeaking(true);
     _lipSync.start();
     _viewer.startTalking();
     setStatus('話し中...');
   };
   pipeline.onSpeechEnd = () => {
-    _speech.isSpeaking = false;
-    _speech.onSpeechEnd?.();
+    _speech.setSpeaking(false);
     _lipSync.stop();
     _viewer.stopTalking();
     _viewer.resetExpressions();

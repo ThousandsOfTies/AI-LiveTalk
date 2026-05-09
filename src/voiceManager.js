@@ -1,6 +1,15 @@
 import { setStatus } from './uiUtils.js';
 import { setOnPipelineEnd, stopPipeline } from './chatManager.js';
 
+const MODE = {
+  MIC:     'mic',
+  RALLY:   'rally',
+  CAMERA:  'camera',
+  GALLERY: 'gallery',
+};
+
+const LONG_PRESS_MS = 600;
+
 const SVG = {
   mic: `<svg viewBox="0 0 24 24" width="30" height="30" xmlns="http://www.w3.org/2000/svg" style="pointer-events:none">
     <circle cx="12" cy="12" r="8" fill="#e74c3c"/>
@@ -29,8 +38,22 @@ const SVG = {
   </svg>`,
 };
 
+const STATUS_BY_MODE = {
+  [MODE.RALLY]:   '会話モード ON',
+  [MODE.CAMERA]:  'カメラモード',
+  [MODE.GALLERY]: 'ギャラリーモード',
+};
+
+const TITLE_BY_MODE = {
+  [MODE.MIC]:     '音声入力 (長押しでモード切替)',
+  [MODE.RALLY]:   '会話モード中 (長押しでモード切替)',
+  [MODE.CAMERA]:  'カメラモード (長押しでモード切替)',
+  [MODE.GALLERY]: 'ギャラリーモード (長押しでモード切替)',
+};
+
 let _speech, _llm, _micBtn, _sendBtn, _stopBtn, _sendMessage, _openCamera, _openGallery;
-let _inputMode          = 'mic'; // 'mic' | 'rally' | 'camera'
+let _chatInput, _picker, _modeOptions;
+let _inputMode          = MODE.MIC;
 let _longPressTimer     = null;
 let _longPressTriggered = false;
 let _receivedTranscript = false;
@@ -45,6 +68,10 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMe
   _openCamera  = openCamera;
   _openGallery = openGallery;
 
+  _chatInput   = document.getElementById('chat-input');
+  _picker      = document.getElementById('input-mode-picker');
+  _modeOptions = _picker.querySelectorAll('.mode-option');
+
   _stopBtn.addEventListener('click', () => {
     stopPipeline();
     _updateUI();
@@ -56,17 +83,17 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMe
   }
 
   setOnPipelineEnd(() => {
-    if (_inputMode === 'rally' && !_speech.isSpeaking && !_speech.isListening) {
+    if (_inputMode === MODE.RALLY && !_speech.isSpeaking && !_speech.isListening) {
       startListeningOnce();
     }
   });
 
-  _speech.onSpeechStart = () => { _updateUI(); };
+  _speech.onSpeechStart = _updateUI;
   _speech.onSpeechEnd   = () => {
-    if (_inputMode === 'rally' && !_speech.isListening) startListeningOnce();
+    if (_inputMode === MODE.RALLY && !_speech.isListening) startListeningOnce();
     _updateUI();
   };
-  _speech.onNoiseModeChange = () => { _updateUI(); };
+  _speech.onNoiseModeChange = _updateUI;
 
   _initModePicker();
   _registerListeners();
@@ -78,30 +105,25 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMe
   });
 }
 
+function _pickIcon(isListening) {
+  if (isListening && _speech.isNoisy) return SVG.noisy;
+  if (_inputMode === MODE.RALLY)      return SVG.rally;
+  if (_inputMode === MODE.CAMERA)     return SVG.camera;
+  if (_inputMode === MODE.GALLERY)    return SVG.gallery;
+  return SVG.mic;
+}
+
 function _updateUI() {
   const isListening = _speech.isListening;
   const isSpeaking  = _speech.isSpeaking;
 
   _micBtn.classList.toggle('active',      isListening);
-  _micBtn.classList.toggle('auto-listen', _inputMode === 'rally');
+  _micBtn.classList.toggle('auto-listen', _inputMode === MODE.RALLY);
   _micBtn.classList.toggle('noisy-mode',  _speech.isNoisy);
-
-  if (isListening && _speech.isNoisy) {
-    _micBtn.innerHTML = SVG.noisy;
-  } else if (_inputMode === 'rally') {
-    _micBtn.innerHTML = SVG.rally;
-  } else if (_inputMode === 'camera') {
-    _micBtn.innerHTML = SVG.camera;
-  } else if (_inputMode === 'gallery') {
-    _micBtn.innerHTML = SVG.gallery;
-  } else {
-    _micBtn.innerHTML = SVG.mic;
-  }
+  _micBtn.innerHTML = _pickIcon(isListening);
 
   _micBtn.disabled  = isSpeaking;
   _sendBtn.disabled = isSpeaking;
-
-  // AIが喋っている間だけ停止ボタンを表示し、送信ボタンを隠す
   _stopBtn.classList.toggle('hidden', !isSpeaking);
   _sendBtn.classList.toggle('hidden', isSpeaking);
 
@@ -111,19 +133,12 @@ function _updateUI() {
   } else if (isSpeaking) {
     setStatus('AI 発話中...');
     _micBtn.title = 'AI発話中 (操作不可)';
-  } else if (_inputMode === 'rally') {
-    setStatus('会話モード ON');
-    _micBtn.title = '会話モード中 (長押しでモード切替)';
-  } else if (_inputMode === 'camera') {
-    setStatus('カメラモード');
-    _micBtn.title = 'カメラモード (長押しでモード切替)';
   } else {
-    setStatus('');
-    _micBtn.title = '音声入力 (長押しでモード切替)';
+    setStatus(STATUS_BY_MODE[_inputMode] || '');
+    _micBtn.title = TITLE_BY_MODE[_inputMode];
   }
 
-  const chatInput = document.getElementById('chat-input');
-  if (chatInput) chatInput.classList.toggle('recording', isListening);
+  _chatInput.classList.toggle('recording', isListening);
 }
 
 export async function startListeningOnce() {
@@ -133,12 +148,9 @@ export async function startListeningOnce() {
   await _speech.startListening();
   _updateUI();
 
-  const chatInput = document.getElementById('chat-input');
   _speech.onInterimTranscript = (text) => {
-    if (chatInput) {
-      chatInput.value = text;
-      chatInput.dispatchEvent(new Event('input'));
-    }
+    _chatInput.value = text;
+    _chatInput.dispatchEvent(new Event('input'));
   };
 
   _speech.onTranscript = (text) => {
@@ -148,22 +160,22 @@ export async function startListeningOnce() {
   };
 
   _speech.onListeningEnd = () => {
-    if (!_receivedTranscript && _inputMode === 'rally') {
+    if (!_receivedTranscript && _inputMode === MODE.RALLY) {
       console.log('[VoiceManager] 無音タイムアウトのためラリーモードを終了します');
-      _inputMode = 'mic';
+      _inputMode = MODE.MIC;
     }
     _updateUI();
   };
 }
 
 function _setMode(mode) {
-  const wasRally = _inputMode === 'rally';
+  const wasRally = _inputMode === MODE.RALLY;
   _inputMode = mode;
 
-  if (wasRally && mode !== 'rally' && _speech.isListening) {
+  if (wasRally && mode !== MODE.RALLY && _speech.isListening) {
     _speech.stopListening();
   }
-  if (mode === 'rally' && !_speech.isListening && !_speech.isSpeaking) {
+  if (mode === MODE.RALLY && !_speech.isListening && !_speech.isSpeaking) {
     startListeningOnce();
   }
 
@@ -172,8 +184,7 @@ function _setMode(mode) {
 }
 
 function _initModePicker() {
-  const picker = document.getElementById('input-mode-picker');
-  picker.querySelectorAll('.mode-option').forEach(btn => {
+  _modeOptions.forEach(btn => {
     btn.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       _setMode(btn.dataset.mode);
@@ -181,8 +192,8 @@ function _initModePicker() {
   });
 
   document.addEventListener('pointerdown', (e) => {
-    if (!picker.classList.contains('hidden') &&
-        !picker.contains(e.target) &&
+    if (!_picker.classList.contains('hidden') &&
+        !_picker.contains(e.target) &&
         e.target !== _micBtn) {
       _hideModePicker();
     }
@@ -190,15 +201,21 @@ function _initModePicker() {
 }
 
 function _showModePicker() {
-  const picker = document.getElementById('input-mode-picker');
-  picker.querySelectorAll('.mode-option').forEach(btn => {
+  _modeOptions.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === _inputMode);
   });
-  picker.classList.remove('hidden');
+  _picker.classList.remove('hidden');
 }
 
 function _hideModePicker() {
-  document.getElementById('input-mode-picker').classList.add('hidden');
+  _picker.classList.add('hidden');
+}
+
+function _clearLongPress() {
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
 }
 
 function _registerListeners() {
@@ -214,43 +231,26 @@ function _registerListeners() {
       _longPressTimer     = null;
       _longPressTriggered = true;
       _showModePicker();
-    }, 600);
+    }, LONG_PRESS_MS);
   });
 
   _micBtn.addEventListener('pointerup', () => {
-    if (_longPressTimer !== null) { clearTimeout(_longPressTimer); _longPressTimer = null; }
+    _clearLongPress();
     if (_longPressTriggered) return;
 
-    if (_inputMode === 'camera') {
-      _openCamera?.();
-      return;
-    }
-    if (_inputMode === 'gallery') {
-      _openGallery?.();
-      return;
-    }
+    if (_inputMode === MODE.CAMERA)  { _openCamera?.();  return; }
+    if (_inputMode === MODE.GALLERY) { _openGallery?.(); return; }
 
-    if (_speech.isListening) {
-      if (_inputMode === 'rally') {
-        _setMode('mic');
-      } else {
-        _speech.stopListening();
-      }
+    if (_inputMode === MODE.RALLY) {
+      _setMode(MODE.MIC);
+    } else if (_speech.isListening) {
+      _speech.stopListening();
     } else {
-      if (_inputMode === 'rally') {
-        _setMode('mic');
-      } else {
-        startListeningOnce().catch(console.error);
-      }
+      startListeningOnce().catch(console.error);
     }
     _updateUI();
   });
 
-  _micBtn.addEventListener('pointerleave', () => {
-    if (_longPressTimer !== null) { clearTimeout(_longPressTimer); _longPressTimer = null; }
-  });
-
-  _micBtn.addEventListener('pointercancel', () => {
-    if (_longPressTimer !== null) { clearTimeout(_longPressTimer); _longPressTimer = null; }
-  });
+  _micBtn.addEventListener('pointerleave', _clearLongPress);
+  _micBtn.addEventListener('pointercancel', _clearLongPress);
 }

@@ -1,32 +1,21 @@
-let _stream = null;
-let _capturedBase64 = null;
-let _onCaptureChange = null;
+const MAX_IMAGE_WIDTH = 1280;
+const JPEG_QUALITY    = 0.85;
 
-export function initCameraManager({ onCaptureChange }) {
-  _onCaptureChange = onCaptureChange;
+let _stream         = null;
+let _capturedBase64 = null;
+let _thumbEl, _thumbImg, _overlayEl, _previewEl, _galleryInput;
+
+export function initCameraManager() {
+  _thumbEl      = document.getElementById('camera-preview-thumb');
+  _thumbImg     = document.getElementById('camera-thumb-img');
+  _overlayEl    = document.getElementById('camera-overlay');
+  _previewEl    = document.getElementById('camera-preview');
+  _galleryInput = document.getElementById('gallery-input');
+
   document.getElementById('camera-capture-btn').addEventListener('click', captureFrame);
   document.getElementById('camera-cancel-btn').addEventListener('click', closeCamera);
   document.getElementById('camera-thumb-clear').addEventListener('click', clearCapture);
-
-  const galleryInput = document.getElementById('gallery-input');
-  galleryInput.addEventListener('change', (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      _capturedBase64 = dataUrl.split(',')[1];
-      document.getElementById('camera-thumb-img').src = dataUrl;
-      document.getElementById('camera-preview-thumb').classList.remove('hidden');
-      _onCaptureChange?.(_capturedBase64);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  });
-}
-
-export function openGallery() {
-  document.getElementById('gallery-input').click();
+  _galleryInput.addEventListener('change', _handleGallerySelection);
 }
 
 export function getCapturedImage() {
@@ -35,8 +24,11 @@ export function getCapturedImage() {
 
 export function clearCapture() {
   _capturedBase64 = null;
-  document.getElementById('camera-preview-thumb').classList.add('hidden');
-  _onCaptureChange?.(null);
+  _thumbEl.classList.add('hidden');
+}
+
+export function openGallery() {
+  _galleryInput.click();
 }
 
 export async function openCamera() {
@@ -45,34 +37,54 @@ export async function openCamera() {
       video: { facingMode: { ideal: 'environment' } },
       audio: false,
     });
-    document.getElementById('camera-preview').srcObject = _stream;
-    document.getElementById('camera-overlay').classList.remove('hidden');
+    _previewEl.srcObject = _stream;
+    _overlayEl.classList.remove('hidden');
   } catch (err) {
     alert('カメラにアクセスできませんでした: ' + err.message);
   }
 }
 
 function captureFrame() {
-  const video = document.getElementById('camera-preview');
-  const MAX = 1280;
-  let w = video.videoWidth, h = video.videoHeight;
-  if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+  const v = _previewEl;
+  _setCapturedImage(_drawScaledToJpeg(v, v.videoWidth, v.videoHeight));
+  closeCamera();
+}
 
+function _handleGallerySelection(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => _setCapturedImage(_drawScaledToJpeg(img, img.naturalWidth, img.naturalHeight));
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function _drawScaledToJpeg(source, srcW, srcH) {
+  let w = srcW, h = srcH;
+  if (w > MAX_IMAGE_WIDTH) {
+    h = Math.round(h * MAX_IMAGE_WIDTH / w);
+    w = MAX_IMAGE_WIDTH;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-  _capturedBase64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+  canvas.getContext('2d').drawImage(source, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', JPEG_QUALITY).split(',')[1];
+}
 
-  document.getElementById('camera-thumb-img').src = `data:image/jpeg;base64,${_capturedBase64}`;
-  document.getElementById('camera-preview-thumb').classList.remove('hidden');
-
-  closeCamera();
-  _onCaptureChange?.(_capturedBase64);
+function _setCapturedImage(base64) {
+  _capturedBase64 = base64;
+  _thumbImg.src = `data:image/jpeg;base64,${base64}`;
+  _thumbEl.classList.remove('hidden');
 }
 
 function closeCamera() {
   _stream?.getTracks().forEach(t => t.stop());
   _stream = null;
-  document.getElementById('camera-overlay').classList.add('hidden');
+  _overlayEl.classList.add('hidden');
 }
