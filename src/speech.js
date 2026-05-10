@@ -48,6 +48,8 @@ export class SpeechManager {
     });
 
     this._recognition = null;
+    this._accumulatedText = '';
+    this._silenceTimer = null;
     this._initRecognition();
 
     // ---- ノイズモニタリング ----
@@ -144,33 +146,63 @@ export class SpeechManager {
 
     this._recognition = new SR();
     this._recognition.lang = 'ja-JP';
-    this._recognition.continuous = false;
+    this._recognition.continuous = true;
     this._recognition.interimResults = true;
 
     this._recognition.onresult = (e) => {
-      this._resetRecognitionTimer(); // 何か聞き取ったらタイマーをリセット
-      const result = e.results[e.results.length - 1];
-      const text = result[0].transcript;
-      if (result.isFinal) {
-        clearTimeout(this._recognitionTimer);
-        this.isListening = false;
-        this.onTranscript?.(text);
-      } else {
-        this.onInterimTranscript?.(text);
+      this._resetRecognitionTimer(); // 30秒の強制タイマーリセット
+      
+      let finalSegment = '';
+      let interimSegment = '';
+
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          finalSegment += result[0].transcript;
+        } else {
+          interimSegment += result[0].transcript;
+        }
+      }
+
+      this._accumulatedText += finalSegment;
+      const currentFullText = this._accumulatedText + interimSegment;
+
+      if (currentFullText.trim().length > 0) {
+        this.onInterimTranscript?.(currentFullText);
+        this._resetSilenceTimer();
       }
     };
 
     this._recognition.onend = () => {
       clearTimeout(this._recognitionTimer);
+      clearTimeout(this._silenceTimer);
       this.isListening = false;
-      this.onListeningEnd?.();
+
+      const text = this._accumulatedText.trim();
+      if (text) {
+        this.onTranscript?.(text);
+      } else {
+        this.onListeningEnd?.();
+      }
+      this._accumulatedText = '';
     };
 
     this._recognition.onerror = (e) => {
       clearTimeout(this._recognitionTimer);
+      clearTimeout(this._silenceTimer);
       console.error('STT エラー:', e.error);
       this.isListening = false;
     };
+  }
+
+  _resetSilenceTimer() {
+    clearTimeout(this._silenceTimer);
+    this._silenceTimer = setTimeout(() => {
+      if (this.isListening && this._recognition) {
+        console.log('[STT] 独自の無音タイムアウトにより確定します');
+        this._recognition.stop();
+      }
+    }, 3000); // 3.0秒の無音で確定（余裕を持たせる）
   }
 
   setLang(lang) {
@@ -319,6 +351,7 @@ export class SpeechManager {
     }
     // Web Speech API パス
     if (!this._recognition) return;
+    this._accumulatedText = '';
     this._recognition.start();
     this.isListening = true;
     this._resetRecognitionTimer();
@@ -340,6 +373,7 @@ export class SpeechManager {
     if (this._mediaRecorder) { this._stopGemini(); return; }
     // Web Speech API パス
     clearTimeout(this._recognitionTimer);
+    clearTimeout(this._silenceTimer);
     this._recognition.stop();
     this.isListening = false;
   }
