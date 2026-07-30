@@ -11,8 +11,11 @@ export class SpeechManager {
   static NOISE_HYSTERESIS   = 0.008; // 静音復帰閾値（チャタリング防止）
   static NOISE_HISTORY_SIZE = 6;     // ローリング平均サンプル数（500ms × 6 = 3秒）
 
-  constructor(llmClient = null) {
-    this._llm = llmClient; // Gemini STT 用（endpoint / apiKey / model 参照）
+  constructor() {
+    // 高精度STTはLLMとは別の接続設定を持つ。別サービスのAPIキーを誤送信しないため、暗黙の流用はしない。
+    this._sttEndpoint = 'https://generativelanguage.googleapis.com/v1beta';
+    this._sttApiKey   = '';
+    this._sttModel    = 'gemini-2.5-flash';
 
     this.isListening = false;
     this.isSpeaking = false;
@@ -58,6 +61,8 @@ export class SpeechManager {
     this._noiseAnalyser = null;
     this._noiseHistory  = [];
     this._noiseTimer    = null;
+    this._noiseGeneration = 0;
+    this._noiseStartPromise = null;
     this.isNoisy        = false;
     /** @type {function(boolean):void} */
     this.onNoiseModeChange = null;
@@ -79,7 +84,7 @@ export class SpeechManager {
 
   get sttSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-        || !!(navigator.mediaDevices && window.MediaRecorder);
+        || this._canUseHighAccuracyStt();
   }
 
   /** AivisSpeech の疎通確認（非同期・バックグラウンド） */
@@ -119,6 +124,21 @@ export class SpeechManager {
     this._checkAivis();
   }
 
+  /** 騒音時に使用する高精度STT（Gemini Audio）の接続設定を更新する。 */
+  updateSttSettings(endpoint, apiKey, model) {
+    this._sttEndpoint = (endpoint || '').replace(/\/+$/, '');
+    this._sttApiKey   = apiKey || '';
+    this._sttModel    = model || '';
+  }
+
+  _hasHighAccuracyStt() {
+    return !!(this._sttEndpoint && this._sttApiKey && this._sttModel);
+  }
+
+  _canUseHighAccuracyStt() {
+    return !!(this._hasHighAccuracyStt() && navigator.mediaDevices && window.MediaRecorder);
+  }
+
   /** 設定を一括適用する */
   applySettings(s) {
     if (s.aivis_url) {
@@ -128,6 +148,9 @@ export class SpeechManager {
       this._cloud.apiKey = s.aivis_cloud_api_key;
       this._useCloud = this._cloud.isAvailable();
     }
+    if (s.stt_endpoint !== undefined) this._sttEndpoint = String(s.stt_endpoint).replace(/\/+$/, '');
+    if (s.stt_api_key !== undefined)  this._sttApiKey   = String(s.stt_api_key);
+    if (s.stt_model !== undefined)    this._sttModel    = String(s.stt_model);
   }
 
   /** 現在の設定をオブジェクトとして返す */
@@ -135,6 +158,9 @@ export class SpeechManager {
     return {
       aivis_url:           this._aivis.baseUrl,
       aivis_cloud_api_key: this._cloud.apiKey,
+      stt_endpoint:        this._sttEndpoint,
+      stt_api_key:         this._sttApiKey,
+      stt_model:           this._sttModel,
     };
   }
 
@@ -177,6 +203,7 @@ export class SpeechManager {
       clearTimeout(this._recognitionTimer);
       clearTimeout(this._silenceTimer);
       this.isListening = false;
+      this.stopNoiseMonitoring();
 
       const text = this._accumulatedText.trim();
       if (text) {
@@ -192,6 +219,7 @@ export class SpeechManager {
       clearTimeout(this._silenceTimer);
       console.error('STT エラー:', e.error);
       this.isListening = false;
+      this.stopNoiseMonitoring();
     };
   }
 
@@ -211,27 +239,41 @@ export class SpeechManager {
 
   // ---- ノイズモニタリング ----
 
-  /** 環境音レベルの常時計測を開始する（最初のユーザー操作後に呼ぶ） */
+  /** 音声入力中だけ環境音レベルの計測を開始する。 */
   async startNoiseMonitoring() {
     if (this._noiseStream) return; // 既に起動済み
-    try {
-      this._noiseStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
-      this._noiseAudioCtx = new AudioContext();
-      this._noiseAnalyser = this._noiseAudioCtx.createAnalyser();
-      this._noiseAnalyser.fftSize = 2048;
-      this._noiseAudioCtx.createMediaStreamSource(this._noiseStream)
-        .connect(this._noiseAnalyser);
-      this._noiseHistory = [];
-      this._noiseTimer = setInterval(() => this._measureNoise(), 500);
-    } catch (e) {
-      console.warn('[NoiseMonitor] getUserMedia 失敗:', e.message);
-    }
+    if (this._noiseStartPromise) return this._noiseStartPromise;
+    const generation = this._noiseGeneration;
+    this._noiseStartPromise = (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+        // 権限ダイアログ表示中などに停止された場合、後からマイクを再開しない。
+        if (generation !== this._noiseGeneration) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        this._noiseStream = stream;
+        this._noiseAudioCtx = new AudioContext();
+        this._noiseAnalyser = this._noiseAudioCtx.createAnalyser();
+        this._noiseAnalyser.fftSize = 2048;
+        this._noiseAudioCtx.createMediaStreamSource(this._noiseStream)
+          .connect(this._noiseAnalyser);
+        this._noiseHistory = [];
+        this._noiseTimer = setInterval(() => this._measureNoise(), 500);
+      } catch (e) {
+        console.warn('[NoiseMonitor] getUserMedia 失敗:', e.message);
+      } finally {
+        this._noiseStartPromise = null;
+      }
+    })();
+    return this._noiseStartPromise;
   }
 
   /** ノイズモニタリングを停止してリソースを解放する */
   stopNoiseMonitoring() {
+    this._noiseGeneration++;
     clearInterval(this._noiseTimer);
     this._noiseTimer = null;
     this._noiseStream?.getTracks().forEach(t => t.stop());
@@ -240,6 +282,10 @@ export class SpeechManager {
     this._noiseAudioCtx = null;
     this._noiseAnalyser = null;
     this._noiseHistory  = [];
+    if (this.isNoisy) {
+      this.isNoisy = false;
+      this.onNoiseModeChange?.(false);
+    }
   }
 
   /** 500ms ごとに呼ばれてノイズレベルを計測・isNoisy を更新する */
@@ -306,18 +352,15 @@ export class SpeechManager {
     this._mediaRecorder.stop();
     this._mediaRecorder = null;
     this.isListening = false;
+    this.stopNoiseMonitoring();
   }
 
   async _transcribeGemini() {
-    const ext  = this._mimeType.includes('ogg') ? 'ogg' : 'webm';
     const blob = new Blob(this._audioChunks, { type: this._mimeType });
     this._audioChunks = [];
     // base64 変換
-    const arrayBuffer = await blob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    const model  = this._llm?.model  || 'gemini-2.0-flash';
-    const apiKey = this._llm?.apiKey || '';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const base64 = await _blobToBase64(blob);
+    const url = `${this._sttEndpoint}/models/${encodeURIComponent(this._sttModel)}:generateContent`;
     const body = {
       contents: [{ parts: [
         { inline_data: { mime_type: this._mimeType.split(';')[0], data: base64 } },
@@ -327,7 +370,10 @@ export class SpeechManager {
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': this._sttApiKey,
+        },
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error(`Gemini STT ${res.status}`);
@@ -338,6 +384,8 @@ export class SpeechManager {
     } catch (e) {
       console.error('[Gemini STT] 転写エラー:', e.message);
       this.onListeningEnd?.();
+    } finally {
+      this.stopNoiseMonitoring();
     }
   }
 
@@ -345,12 +393,17 @@ export class SpeechManager {
 
   async startListening() {
     if (this.isListening) return;
-    if (this.isNoisy) {
+    await this.startNoiseMonitoring();
+    this._measureNoise();
+    if (this.isNoisy && this._canUseHighAccuracyStt()) {
       await this._startGemini();
       return;
     }
     // Web Speech API パス
-    if (!this._recognition) return;
+    if (!this._recognition) {
+      this.stopNoiseMonitoring();
+      return;
+    }
     this._accumulatedText = '';
     this._recognition.start();
     this.isListening = true;
@@ -376,6 +429,7 @@ export class SpeechManager {
     clearTimeout(this._silenceTimer);
     this._recognition.stop();
     this.isListening = false;
+    this.stopNoiseMonitoring();
   }
 
   /**
@@ -521,4 +575,13 @@ export class SpeechManager {
     window.speechSynthesis.cancel();
     this.isSpeaking = false;
   }
+}
+
+function _blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',', 2)[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('音声データの変換に失敗しました'));
+    reader.readAsDataURL(blob);
+  });
 }

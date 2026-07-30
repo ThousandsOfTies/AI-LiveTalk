@@ -230,6 +230,7 @@ function _registerListeners() {
     _longPressTimer = setTimeout(() => {
       _longPressTimer     = null;
       _longPressTriggered = true;
+      _speech.stopNoiseMonitoring();
       _showModePicker();
     }, LONG_PRESS_MS);
   });
@@ -238,8 +239,8 @@ function _registerListeners() {
     _clearLongPress();
     if (_longPressTriggered) return;
 
-    if (_inputMode === MODE.CAMERA)  { _openCamera?.();  return; }
-    if (_inputMode === MODE.GALLERY) { _openGallery?.(); return; }
+    if (_inputMode === MODE.CAMERA)  { _speech.stopNoiseMonitoring(); _openCamera?.();  return; }
+    if (_inputMode === MODE.GALLERY) { _speech.stopNoiseMonitoring(); _openGallery?.(); return; }
 
     if (_inputMode === MODE.RALLY) {
       _setMode(MODE.MIC);
@@ -251,6 +252,12 @@ function _registerListeners() {
     _updateUI();
   });
 
-  _micBtn.addEventListener('pointerleave', _clearLongPress);
-  _micBtn.addEventListener('pointercancel', _clearLongPress);
+  _micBtn.addEventListener('pointerleave', () => {
+    _clearLongPress();
+    if (!_speech.isListening) _speech.stopNoiseMonitoring();
+  });
+  _micBtn.addEventListener('pointercancel', () => {
+    _clearLongPress();
+    if (!_speech.isListening) _speech.stopNoiseMonitoring();
+  });
 }

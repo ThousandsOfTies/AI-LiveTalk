@@ -102,10 +102,10 @@ export class AivisSpeechClient extends BaseClient {
    * @param {string} text
    * @returns {Promise<ArrayBuffer>}
    */
-  async synthesize(text) {
+  async synthesize(text, { signal } = {}) {
     const queryRes = await fetch(
       `${this.baseUrl}/audio_query?text=${encodeURIComponent(text)}&speaker=${this.speakerId}`,
-      { method: 'POST' }
+      { method: 'POST', signal }
     );
     if (!queryRes.ok) throw new Error(`audio_query エラー: ${queryRes.status}`);
     const query = await queryRes.json();
@@ -116,6 +116,7 @@ export class AivisSpeechClient extends BaseClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(query),
+        signal,
       }
     );
     if (!synthRes.ok) throw new Error(`synthesis エラー: ${synthRes.status}`);
@@ -154,7 +155,7 @@ export class AivisCloudClient extends BaseClient {
    * @param {string} text
    * @returns {Promise<ArrayBuffer>}
    */
-  async synthesize(text) {
+  async synthesize(text, { signal } = {}) {
     if (!this.modelUuid) {
       throw new Error('Aivis Cloud: モデルUUIDが未設定です。設定からモデルUUIDを入力してください');
     }
@@ -175,6 +176,7 @@ export class AivisCloudClient extends BaseClient {
         'Content-Type':  'application/json',
       },
       body: JSON.stringify(reqBody),
+      signal,
     });
 
     if (res.status === 401) throw new Error('Aivis Cloud API: APIキーが無効です');

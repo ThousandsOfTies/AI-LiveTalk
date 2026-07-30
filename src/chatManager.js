@@ -111,6 +111,7 @@ export function setOnPipelineEnd(cb) {
 }
 
 export function stopPipeline() {
+  _llm.abortActiveRequest();
   if (_activePipeline) {
     _activePipeline.stop();
     _activePipeline = null;
@@ -220,12 +221,18 @@ export async function sendMessage(text, options = {}) {
     _scheduleHistorySave();
 
   } catch (err) {
-    textNode.textContent = `エラー: ${err.message}`;
+    const wasAborted = err?.name === 'AbortError';
+    if (wasAborted) {
+      textNode.textContent = fullResponse.trim() || '（中断しました）';
+      setStatus('');
+    } else {
+      textNode.textContent = `エラー: ${err.message}`;
+      setStatus('エラーが発生しました');
+      console.error(err);
+    }
     _viewer.resetExpressions();
     _lipSync.stop();
     _viewer.stopTalking();
-    setStatus('エラーが発生しました');
-    console.error(err);
   } finally {
     if (_activePipeline === pipeline) _activePipeline = null;
     setInputEnabled(true);

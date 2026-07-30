@@ -191,11 +191,15 @@ export function refreshSettingsPanel() {
   document.getElementById('setting-endpoint').value      = _llm.endpoint;
   document.getElementById('setting-api-key').value       = _llm.apiKey;
   document.getElementById('setting-model').value         = _llm.model;
+  document.getElementById('setting-max-context-turns').value = _llm.maxContextTurns;
   document.getElementById('setting-system-prompt').value =
     vrmState.systemPrompts[vrmState.currentVrmId] ?? _llm.systemPrompt;
   document.getElementById('setting-tts-lang').value      = _llm.ttsLang;
 
   const ss = _speech.getSettings();
+  document.getElementById('setting-stt-endpoint').value = ss.stt_endpoint || '';
+  document.getElementById('setting-stt-api-key').value  = ss.stt_api_key || '';
+  document.getElementById('setting-stt-model').value    = ss.stt_model || '';
   document.getElementById('setting-aivis-url').value = ss.aivis_url || 'http://127.0.0.1:10101';
 
   const d = getPersonaData();
@@ -255,6 +259,9 @@ function _saveSettingsHandler() {
   _llm.endpoint = document.getElementById('setting-endpoint').value.trim();
   _llm.apiKey   = document.getElementById('setting-api-key').value.trim();
   _llm.model    = document.getElementById('setting-model').value.trim();
+  _llm.maxContextTurns = Math.max(0, Math.min(100,
+    Number.parseInt(document.getElementById('setting-max-context-turns').value, 10) || 0
+  ));
 
   const rawPrompt = document.getElementById('setting-system-prompt').value.trim();
   if (!rawPrompt) {
@@ -281,6 +288,12 @@ function _saveSettingsHandler() {
   const proactiveMode = document.getElementById('setting-proactive-mode')?.checked ?? false;
   _speech.updateAivisSettings(url, speakerId);
   updatePersonaData(getCurrentPersona(), { speakerId, isProactive: proactiveMode });
+
+  _speech.updateSttSettings(
+    document.getElementById('setting-stt-endpoint').value.trim(),
+    document.getElementById('setting-stt-api-key').value.trim(),
+    document.getElementById('setting-stt-model').value.trim(),
+  );
 
   const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
   const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();

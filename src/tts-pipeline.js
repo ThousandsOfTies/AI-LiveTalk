@@ -32,8 +32,10 @@ export class TTSPipeline {
     this._inFlight  = 0;
     // 停止済みフラグ
     this._stopped   = false;
+    this._abortController = new AbortController();
     // 再生中の AudioBufferSourceNode
     this._currentSrc = null;
+    this._currentFinish = null;
     // 最初の一言を再生開始したか
     this._started   = false;
 
@@ -90,11 +92,11 @@ export class TTSPipeline {
   /** 再生を中断する */
   stop() {
     this._stopped = true;
+    this._abortController.abort();
     this._stopCurrentAudio();
-    this._queue   = [];
-    this._inFlight = 0;
     this._speech.stopSpeaking();
     this._doneResolve?.();
+    this._doneResolve = null;
   }
 
   // ---- プライベート: 文分割 & 合成 ----
@@ -125,13 +127,14 @@ export class TTSPipeline {
 
   /** 文をAivisSpeechまたはCloud APIで合成してキューに積み、再生ループを起動する */
   _enqueueSynth(text) {
+    if (this._stopped) return;
     this._inFlight++;
 
     // ローカル AivisSpeech を優先し、未利用時のみ Cloud API を使用する (Local > Cloud)
     const client = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
 
     // 合成は即座に開始（再生を待たない）
-    const audioPromise = client.synthesize(text)
+    const audioPromise = client.synthesize(text, { signal: this._abortController.signal })
       .then(buf  => { this._inFlight--; return buf; })
       .catch(err => { this._inFlight--; throw err; });
 
@@ -152,7 +155,7 @@ export class TTSPipeline {
       const audioPromise = this._queue.shift();
       try {
         const audioBuffer = await audioPromise;
-        if (this._stopped) break;
+        if (this._stopped) continue;
 
         if (!this._started) {
           this._started = true;
@@ -160,6 +163,7 @@ export class TTSPipeline {
         }
         await this._playBuffer(audioBuffer);
       } catch (err) {
+        if (this._stopped && err?.name === 'AbortError') continue;
         console.warn('[TTSPipeline] 合成/再生エラー:', err.message);
         this.onSpeechError?.(err);
       }
@@ -170,6 +174,7 @@ export class TTSPipeline {
 
   /** 全て完了したか確認し、完了していれば Promise を解決する */
   _checkDone() {
+    if (this._stopped) return;
     if (
       this._finished     &&
       this._queue.length === 0 &&
@@ -203,15 +208,19 @@ export class TTSPipeline {
 
     return new Promise((resolve) => {
       let isDone = false;
+      let timeoutId = null;
       const finish = () => {
         if (isDone) return;
         isDone = true;
+        clearTimeout(timeoutId);
         URL.revokeObjectURL(url);
         // 共有要素の場合は src を空にする（メモリ解放）が、インスタンスは保持
         audio.src = '';
         this._currentSrc = null;
+        this._currentFinish = null;
         resolve();
       };
+      this._currentFinish = finish;
 
       audio.onended  = finish;
       audio.onerror  = (e) => {
@@ -221,7 +230,7 @@ export class TTSPipeline {
 
       // セーフティタイムアウト
       const estimatedMs = (rawBuffer.byteLength / 16000) * 1000;
-      setTimeout(finish, Math.max(estimatedMs + 2000, 5000));
+      timeoutId = setTimeout(finish, Math.max(estimatedMs + 2000, 5000));
 
       audio.play().catch((err) => {
         console.warn('[TTSPipeline] audio.play() 失敗:', err.message);
@@ -239,7 +248,8 @@ export class TTSPipeline {
         try { this._currentSrc.stop(); } catch { /* ignore */ }
       }
       this._currentSrc = null;
+      this._currentFinish?.();
+      this._currentFinish = null;
     }
   }
 }
-

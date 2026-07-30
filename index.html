@@ -212,6 +212,11 @@
             モデル名
             <input type="text" id="setting-model" placeholder="gemini-3.1-flash-lite-preview" autocomplete="off" spellcheck="false">
           </label>
+          <label>
+            コンテキスト長（直近の会話往復数）
+            <span class="hint">LLMへ送る過去の会話数。0は過去履歴を送信しません（保存済み履歴は削除されません）</span>
+            <input type="number" id="setting-max-context-turns" min="0" max="100" step="1" value="20">
+          </label>
           <label class="drive-toggle-label">
             <input type="checkbox" id="location-chk">
             <span class="drive-toggle-track"><span class="drive-toggle-thumb"></span></span>
@@ -223,6 +228,23 @@
         <!-- 音声タブ -->
         <div class="tab-panel" id="tab-voice">
           <div id="voice-sex-indicator" class="hint" style="margin-bottom:8px;"></div>
+          <div class="setting-section">
+            <strong>騒音時の高精度音声認識（Gemini Audio）</strong>
+            <span class="hint">LLMとは独立した接続設定です。3項目すべてを設定した場合だけ、騒音時に自動使用します。</span>
+          </div>
+          <label>
+            STT APIエンドポイント
+            <input type="text" id="setting-stt-endpoint" placeholder="https://generativelanguage.googleapis.com/v1beta" autocomplete="off" spellcheck="false">
+          </label>
+          <label>
+            STT APIキー
+            <input type="text" id="setting-stt-api-key" placeholder="AIza..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
+          </label>
+          <label>
+            STTモデル名
+            <input type="text" id="setting-stt-model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+          </label>
+          <hr>
           <label>
             TTS 言語
             <select id="setting-tts-lang">

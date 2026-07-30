@@ -26,6 +26,7 @@ const DEFAULTS = {
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,
   ttsLang: 'ja-JP',
+  maxContextTurns: 20,
 };
 
 export const DEFAULT_MALE_SYSTEM_PROMPT = `あなたの名前はリルマです。あなたは私の親しい男の子の友達です。タメ口で、フレンドリーにおしゃべりしてください。
@@ -39,6 +40,7 @@ export class LLMClient {
     this.model = DEFAULTS.model;
     this.systemPrompt = DEFAULTS.systemPrompt;
     this.ttsLang = DEFAULTS.ttsLang;
+    this.maxContextTurns = DEFAULTS.maxContextTurns;
     this.history = [];
     this.userProfile = [];
     /** 位置情報コンテキスト（空文字の場合は使用しない） */
@@ -48,6 +50,7 @@ export class LLMClient {
     this.onEmotionDetected = null;
     /** メモ(プロファイル)検出時に呼ばれるコールバック @type {function(string):void} */
     this.onMemoDetected = null;
+    this._activeAbortController = null;
   }
 
   /** 設定を一括適用する */
@@ -57,6 +60,9 @@ export class LLMClient {
     if (s.llm_model)        this.model        = s.llm_model;
     if (s.llm_system_prompt !== undefined) this.systemPrompt = s.llm_system_prompt;
     if (s.llm_tts_lang)     this.ttsLang      = s.llm_tts_lang;
+    if (s.llm_max_context_turns !== undefined) {
+      this.maxContextTurns = normalizeContextTurns(s.llm_max_context_turns);
+    }
   }
 
   /** 現在の設定をオブジェクトとして返す */
@@ -67,11 +73,17 @@ export class LLMClient {
       llm_model:        this.model,
       llm_system_prompt: this.systemPrompt,
       llm_tts_lang:     this.ttsLang,
+      llm_max_context_turns: String(this.maxContextTurns),
     };
   }
 
   clearHistory() {
     this.history = [];
+  }
+
+  /** 現在生成中のLLMリクエストを中断する。 */
+  abortActiveRequest() {
+    this._activeAbortController?.abort();
   }
 
   /**
@@ -82,8 +94,7 @@ export class LLMClient {
    */
   async *chat(userMessage, imageBase64 = null) {
     const textMsg = userMessage || (imageBase64 ? 'この画像について教えて' : '');
-    // 履歴にはテキストのみ保存（画像は毎回送ると高コストなため）
-    this.history.push({ role: 'user', content: textMsg });
+    const userHistoryEntry = { role: 'user', content: textMsg };
 
     const profileContext = this.userProfile && this.userProfile.length > 0
       ? `\n\n【これまでの分析で判明しているユーザーの特徴】\n- ` + this.userProfile.join(`\n- `)
@@ -96,11 +107,13 @@ export class LLMClient {
         ]
       : textMsg;
 
+    const maxMessages = this.maxContextTurns * 2;
+    const contextHistory = maxMessages > 0 ? this.history.slice(-maxMessages) : [];
     const body = {
       model: this.model,
       messages: [
         { role: 'system', content: this.systemPrompt + (this.locationContext ? '\n\n' + this.locationContext : '') + profileContext + EMOTION_INSTRUCTION },
-        ...this.history.slice(0, -1), // 過去の履歴
+        ...contextHistory,
         { role: 'user', content: currentUserContent }, // 現在のメッセージ（画像付き可）
       ],
       stream: true,
@@ -114,91 +127,110 @@ export class LLMClient {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    const res = await fetch(`${this.endpoint.replace(/\/+$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    this._activeAbortController?.abort();
+    this._activeAbortController = controller;
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`LLM API エラー ${res.status}: ${errText}`);
-    }
+    let reader = null;
+    try {
+      const res = await fetch(`${this.endpoint.replace(/\/+$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let assistantMessage = '';
-    let sseBuffer = '';
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`LLM API エラー ${res.status}: ${errText}`);
+      }
 
-    // 感情タグ検出用の先頭バッファ
-    let emotionParsed = false;
-    let prefixBuf = '';
+      if (!res.body) throw new Error('LLM APIからストリームを取得できませんでした');
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = '';
+      let sseBuffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      // 感情タグ検出用の先頭バッファ
+      let emotionParsed = false;
+      let prefixBuf = '';
 
-      sseBuffer += decoder.decode(value, { stream: true });
-      const lines = sseBuffer.split('\n');
-      sseBuffer = lines.pop(); // 最後の不完全行を残す
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const payload = trimmed.slice(6);
-        if (payload === '[DONE]') continue;
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split('\n');
+        sseBuffer = lines.pop(); // 最後の不完全行を残す
 
-        try {
-          const json = JSON.parse(payload);
-          const delta = json.choices?.[0]?.delta?.content;
-          if (!delta) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const payload = trimmed.slice(6);
+          if (payload === '[DONE]') continue;
 
-          if (!emotionParsed) {
-            prefixBuf += delta;
+          try {
+            const json = JSON.parse(payload);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (!delta) continue;
 
-            // 先頭の [EMO:xxx] タグ群を処理
-            if (/^\s*\[/.test(prefixBuf) || prefixBuf.trim() === '') {
-              let m;
-              while ((m = prefixBuf.match(/\[EMO:([^\]]+)\]\s*/))) {
-                this.onEmotionDetected?.(m[1].trim().toLowerCase());
-                prefixBuf = prefixBuf.replace(m[0], '');
-              }
-              while ((m = prefixBuf.match(/\[MEMO:([^\]]+)\]\s*/))) {
-                this.onMemoDetected?.(m[1].trim());
-                prefixBuf = prefixBuf.replace(m[0], '');
-              }
-              // まだ開始ブラケットがある、またはバッファが空（次の文字待ち）の場合は処理を保留
+            if (!emotionParsed) {
+              prefixBuf += delta;
+
+              // 先頭の [EMO:xxx] タグ群を処理
               if (/^\s*\[/.test(prefixBuf) || prefixBuf.trim() === '') {
-                if (prefixBuf.length > 80 || prefixBuf.includes('\n')) {
-                  // 諦めて出力
+                let m;
+                while ((m = prefixBuf.match(/\[EMO:([^\]]+)\]\s*/))) {
+                  this.onEmotionDetected?.(m[1].trim().toLowerCase());
+                  prefixBuf = prefixBuf.replace(m[0], '');
+                }
+                while ((m = prefixBuf.match(/\[MEMO:([^\]]+)\]\s*/))) {
+                  this.onMemoDetected?.(m[1].trim());
+                  prefixBuf = prefixBuf.replace(m[0], '');
+                }
+                // まだ開始ブラケットがある、またはバッファが空（次の文字待ち）の場合は処理を保留
+                if (/^\s*\[/.test(prefixBuf) || prefixBuf.trim() === '') {
+                  if (prefixBuf.length > 80 || prefixBuf.includes('\n')) {
+                    // 諦めて出力
+                    emotionParsed = true;
+                    assistantMessage += prefixBuf;
+                    yield prefixBuf;
+                  }
+                } else {
+                  // タグではない通常文字が始まったので通常出力に切り替え
                   emotionParsed = true;
                   assistantMessage += prefixBuf;
                   yield prefixBuf;
                 }
               } else {
-                // タグではない通常文字が始まったので通常出力に切り替え
+                // そもそもブラケット始まりではなかった
                 emotionParsed = true;
                 assistantMessage += prefixBuf;
                 yield prefixBuf;
               }
             } else {
-              // そもそもブラケット始まりではなかった
-              emotionParsed = true;
-              assistantMessage += prefixBuf;
-              yield prefixBuf;
+              assistantMessage += delta;
+              yield delta;
             }
-          } else {
-            assistantMessage += delta;
-            yield delta;
+          } catch {
+            // JSON パース失敗は無視
           }
-        } catch {
-          // JSON パース失敗は無視
         }
       }
-    }
 
-    this.history.push({ role: 'assistant', content: assistantMessage });
+      // 完了した往復だけを履歴に確定する。中断・失敗時は片側だけ残さない。
+      this.history.push(userHistoryEntry, { role: 'assistant', content: assistantMessage });
+    } finally {
+      if (controller.signal.aborted) await reader?.cancel().catch(() => {});
+      if (this._activeAbortController === controller) this._activeAbortController = null;
+    }
   }
+}
+
+export function normalizeContextTurns(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULTS.maxContextTurns;
+  return Math.max(0, Math.min(100, parsed));
 }
 
 /** デフォルトのシステムプロンプト（空欄保存時のリセット用に公開） */

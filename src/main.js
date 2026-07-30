@@ -12,7 +12,7 @@ import { initApp }        from './appInit.js';
 const canvas   = document.getElementById('vrm-canvas');
 const viewer   = new VRMViewer(canvas);
 const llm      = new LLMClient();
-const speech   = new SpeechManager(llm);
+const speech   = new SpeechManager();
 const lipSync  = new LipSync(viewer);
 const driveSync = new GoogleDriveSync();
 const local    = new LocalStorage();
