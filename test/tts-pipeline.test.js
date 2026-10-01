@@ -4,17 +4,16 @@ import { TTSPipeline } from '../src/tts-pipeline.js';
 
 test('停止時に進行中の音声合成リクエストもabortする', async () => {
   let receivedSignal;
-  const speech = {
-    _useAivis: true,
-    _useCloud: false,
-    _aivis: {
-      synthesize(_text, { signal }) {
-        receivedSignal = signal;
-        return new Promise((_resolve, reject) => {
-          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-        });
-      },
+  const client = {
+    synthesize(_text, { signal }) {
+      receivedSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      });
     },
+  };
+  const speech = {
+    getTtsClient: () => client,
     stopSpeaking() {},
   };
 

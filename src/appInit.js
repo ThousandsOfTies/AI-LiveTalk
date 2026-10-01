@@ -6,7 +6,7 @@ import {
 import { initChatManager, sendMessage } from './chatManager.js';
 import { initCameraManager, openCamera, openGallery } from './cameraManager.js';
 import { initVoiceManager } from './voiceManager.js';
-import { initSettingsManager, applySettings, saveSettings } from './settingsManager.js';
+import { initSettingsManager, applySettings, collectSettings, saveSettings } from './settingsManager.js';
 import {
   initHistorySync, getAutoSaveEnabled, scheduleHistorySave, loadHistoryAndProfile,
 } from './historySync.js';
@@ -69,6 +69,17 @@ export async function initApp({ viewer, llm, speech, lipSync, driveSync, storage
   // 設定を読み込んで全モジュールに適用
   const saved = await storage.loadSettings().catch(() => null);
   applySettings(saved);
+  const oldKeys = ['aivis_url', 'aivis_cloud_api_key', 'stt_endpoint', 'stt_api_key',
+    'gemini_tts_api_key', 'tts_provider'];
+  const hasOldPersonaSettings = ['female', 'male'].some(persona => {
+    const data = saved?.sex?.[persona];
+    return data && ['speakerId', 'cloudModelUuid', 'cloudStyleId'].some(key => key in data);
+  });
+  if (saved && (oldKeys.some(key => key in saved) || hasOldPersonaSettings)) {
+    await storage.saveSettings(collectSettings()).catch(error =>
+      console.warn('Gemini共通設定への移行保存に失敗:', error.message)
+    );
+  }
 
   // プロファイルと会話履歴の非同期ロード（UIをブロックしない）
   loadHistoryAndProfile({

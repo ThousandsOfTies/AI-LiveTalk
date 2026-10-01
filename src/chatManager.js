@@ -150,18 +150,9 @@ export async function sendMessage(text, options = {}) {
   }
 
   if (!_llm.apiKey) {
-    const msg = 'APIキーがまだ設定されていないみたい。右上の設定ボタンから、LLMタブでAPIキーを入れてね！';
+    const msg = 'Gemini APIキーがまだ設定されていないみたい。右上の設定ボタンから、LLMタブで共通APIキーを入れてね！';
     appendMessage('assistant', msg, true);
     _viewer.applyEmotion('neutral');
-    const p = new TTSPipeline(_speech);
-    p.onSpeechStart = () => { _lipSync.start(); _viewer.startTalking(); };
-    p.onSpeechEnd   = () => { 
-      _lipSync.stop(); _viewer.stopTalking(); _viewer.resetExpressions(); 
-      const vrmaMap = _getVrmaEmotionMap();
-      _viewer.loadVRMA(_resolveVrmaUrl(vrmaMap.neutral), { loop: true, isIdle: true }).catch(e => console.warn('待機VRMA再生失敗:', e));
-    };
-    p.push(msg);
-    await p.done({ lang: _llm.ttsLang });
     return;
   }
 
@@ -177,6 +168,7 @@ export async function sendMessage(text, options = {}) {
 
   const pipeline   = new TTSPipeline(_speech);
   _activePipeline  = pipeline;
+  let ttsError = false;
 
   pipeline.onSpeechStart = () => {
     _speech.setSpeaking(true);
@@ -189,19 +181,25 @@ export async function sendMessage(text, options = {}) {
     _lipSync.stop();
     _viewer.stopTalking();
     _viewer.resetExpressions();
-    setStatus('');
+    if (!ttsError) setStatus('');
     const vrmaMap = _getVrmaEmotionMap();
     _viewer.loadVRMA(_resolveVrmaUrl(vrmaMap.neutral), { loop: true, isIdle: true }).catch(e => console.warn('待機VRMA再生失敗:', e));
   };
   pipeline.onSpeechError = (err) => {
+    ttsError = true;
     setStatus(`⚠️ TTS エラー: ${err.message}`);
   };
 
   let fullResponse = '';
+  let responseStarted = false;
 
   try {
     for await (const chunk of _llm.chat(text, imageBase64)) {
       if (_activePipeline !== pipeline) break;
+      if (!responseStarted) {
+        responseStarted = true;
+        setStatus('音声を準備中...');
+      }
       const wasNearBottom = isNearBottom();
       fullResponse += chunk;
       pipeline.push(chunk);

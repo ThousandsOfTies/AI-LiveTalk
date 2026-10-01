@@ -416,6 +416,33 @@ body {
   font-weight: 400;
 }
 
+.setting-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.voice-lab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 11px;
+  border: 1px solid #8078ff;
+  border-radius: 8px;
+  background: #302d66;
+  color: #f3f1ff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.voice-lab-button:hover, .voice-lab-button:focus-visible {
+  background: #5149a7;
+  outline: none;
+}
+
 #settings-inner input,
 #settings-inner select,
 #settings-inner textarea {
@@ -496,19 +523,6 @@ body {
 }
 #vrma-preset-select:focus { outline: none; border-color: #6c7aff; }
 #vrma-preset-select option { background: #1a1a2e; color: #e8e8f8; }
-
-#aivis-check-btn {
-  background: #1a2a1a;
-  color: #6c6;
-  border: 1px solid #2a4a2a;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  white-space: nowrap;
-  transition: background 0.2s;
-}
-#aivis-check-btn:hover { background: #223322; }
 
 /* ---- 設定ヘッダー ---- */
 #settings-header {

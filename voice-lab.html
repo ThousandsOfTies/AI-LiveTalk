@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini 音声ラボ | AI-LiveTalk</title>
+  <link rel="stylesheet" href="/src/voice-lab.css">
+</head>
+<body>
+  <main class="lab">
+    <header>
+      <a href="./" class="back">← AI-LiveTalk</a>
+      <h1>Gemini 音声ラボ</h1>
+      <p>声を作り、同じセリフで聴き比べて、気に入ったVoice IDを本体に設定できます。</p>
+    </header>
+
+    <section class="panel">
+      <h2>1. 声の特徴を決める</h2>
+      <p class="hint">AI-LiveTalkの「設定 → LLM」にあるGemini APIキーを自動で使います。声の作成と試聴はGemini APIの使用量に計上されます。</p>
+      <p id="key-status" class="hint" role="status" aria-live="polite">APIキーを確認中…</p>
+      <label>声の名前 <input id="voice-name" maxlength="80" value="明るくやさしい子"></label>
+      <label>声の説明 <textarea id="description" rows="3">日本で育った日本語ネイティブのオリジナルキャラクターボイス。標準的な日本語の発音と自然なアクセント。やや高めで明るく、柔らかい声質。親しみやすく少し甘えた雰囲気で、聞き取りやすさを保つ。</textarea></label>
+      <p class="hint">声質などの変わらない特徴を短い文章で書きます。作成するたびに別の声が生まれます。</p>
+      <button id="create" class="primary">この説明で新しい声を作る</button>
+    </section>
+
+    <section class="panel">
+      <h2>2. 同じセリフで試聴する</h2>
+      <label>試聴用TTSモデル
+        <select id="model">
+          <option value="gemini-3.8-flash-tts">3.8 Flash（表現重視）</option>
+          <option value="gemini-3.8-flash-lite-tts">3.8 Flash-Lite（速度・料金重視）</option>
+        </select>
+      </label>
+      <p class="hint">声の作成にはモデル指定を使いません。作った声はどちらのTTSモデルでも試聴できます。</p>
+      <label>試聴する文章 <textarea id="sample-text" rows="3">こんにちは！ 今日もお話できてうれしいな。何から始めようか？</textarea></label>
+      <p class="hint">作成直後にGeminiが返す自動サンプルはセリフを指定できません。ここでは上の文章を日本語で読み上げて確認します。</p>
+      <label>セリフの演技（任意） <input id="style" placeholder="例: 明るく弾むように、少し照れながら"></label>
+      <p class="hint">作成した声の性格は「声の説明」、このセリフだけの感情は「演技」で調整します。</p>
+      <div id="voices" class="voices"></div>
+      <p id="empty" class="empty">作成した声がここに並びます。</p>
+    </section>
+
+    <section class="panel">
+      <h2>3. AI-LiveTalkで使う</h2>
+      <p>気に入った声の「Voice IDをコピー」を押し、本体の「設定 → 音声 → Gemini TTS」に貼り付けてください。</p>
+      <a href="./" class="back">AI-LiveTalkを開く →</a>
+    </section>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script type="module" src="/src/voice-lab.js"></script>
+</body>
+</html>

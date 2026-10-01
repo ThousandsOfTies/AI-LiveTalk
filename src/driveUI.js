@@ -45,7 +45,9 @@ export function initDriveUI({ driveSync, storage, llm, speech, viewer }) {
     try {
       driveSync.signIn();
     } catch (err) {
-      document.getElementById('drive-status').textContent = `❌ ${err.message}`;
+      const message = `❌ ${err.message}`;
+      document.getElementById('drive-status').textContent = message;
+      setStatus(message);
     }
   });
 

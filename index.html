@@ -199,13 +199,8 @@
         <!-- LLMタブ -->
         <div class="tab-panel" id="tab-llm">
           <label>
-            APIエンドポイント
-            <span class="hint">OpenAI互換ならOllama (http://localhost:11434/v1) も可</span>
-            <input type="text" id="setting-endpoint" placeholder="https://generativelanguage.googleapis.com/v1beta/openai/" autocomplete="off" spellcheck="false">
-          </label>
-          <label>
-            APIキー
-            <span class="hint">Ollamaはダミー文字列でも可 (例: ollama)</span>
+            Gemini APIキー（会話・音声入力・読み上げ共通）
+            <span class="hint">音声ラボで作った声と同じGoogle Cloudプロジェクトのキーを入力してください。</span>
             <input type="text" id="setting-api-key" placeholder="AIza..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
           </label>
           <label>
@@ -229,58 +224,40 @@
         <div class="tab-panel" id="tab-voice">
           <div id="voice-sex-indicator" class="hint" style="margin-bottom:8px;"></div>
           <div class="setting-section">
-            <strong>騒音時の高精度音声認識（Gemini Audio）</strong>
-            <span class="hint">LLMとは独立した接続設定です。3項目すべてを設定した場合だけ、騒音時に自動使用します。</span>
+            <strong>音声入力（Gemini）</strong>
+            <span class="hint">上の共通APIキーを使用します。発話後に自動で文字起こしします。</span>
           </div>
           <label>
-            STT APIエンドポイント
-            <input type="text" id="setting-stt-endpoint" placeholder="https://generativelanguage.googleapis.com/v1beta" autocomplete="off" spellcheck="false">
-          </label>
-          <label>
-            STT APIキー
-            <input type="text" id="setting-stt-api-key" placeholder="AIza..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
-          </label>
-          <label>
             STTモデル名
-            <input type="text" id="setting-stt-model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+            <input type="text" id="setting-stt-model" placeholder="gemini-3.5-flash-lite" autocomplete="off" spellcheck="false">
           </label>
           <hr>
           <label>
-            TTS 言語
+            音声入力の言語
             <select id="setting-tts-lang">
               <option value="ja-JP">日本語 (ja-JP)</option>
               <option value="en-US">English (en-US)</option>
               <option value="zh-CN">中文 (zh-CN)</option>
             </select>
           </label>
-          <label>
-            AivisSpeech URL
-            <span class="hint">起動中なら自動検出されます (デフォルト: http://localhost:10101)</span>
-            <input type="text" id="setting-aivis-url" placeholder="http://localhost:10101" autocomplete="off" spellcheck="false">
-          </label>
-          <div class="setting-item">
-            <label>AivisSpeech 話者ID</label>
-            <span class="hint">接続中ならリストから選べます</span>
-            <div class="row-flex">
-              <select id="setting-aivis-speaker" style="flex:1"></select>
-              <button type="button" id="aivis-check-btn" class="small-btn">疎通確認・リスト更新</button>
-            </div>
-            <div id="aivis-status" class="status-msg hint"></div>
+          <div class="setting-section">
+            <strong>Gemini TTS</strong>
+            <a class="voice-lab-button" href="./voice-lab.html" target="_blank" rel="noopener">🎙 ボイス作成 ↗</a>
           </div>
           <label>
-            Aivis Cloud API キー
-            <span class="hint">Cloud API を使うと PC なしでスマホからも高品質 TTS が使えます (<a href="https://hub.aivis-project.com/cloud-api/dashboard" target="_blank">取得</a>)</span>
-            <input type="text" id="setting-cloud-api-key" placeholder="aivis-..." autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;">
+            Gemini TTS モデル
+            <select id="setting-gemini-tts-model">
+              <option value="gemini-3.8-flash-tts">3.8 Flash</option>
+              <option value="gemini-3.8-flash-lite-tts">3.8 Flash-Lite</option>
+            </select>
           </label>
           <label>
-            Aivis Cloud API モデル UUID
-            <span class="hint">AivisHub のモデルページ URL に含まれる UUID (<a href="https://hub.aivis-project.com/" target="_blank">モデル一覧</a>)</span>
-            <input type="text" id="setting-cloud-model-uuid" placeholder="例: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+            Voice ID（キャラクター別。空欄なら標準の声）
+            <input type="text" id="setting-gemini-voice-id" placeholder="voice_..." autocomplete="off" spellcheck="false">
           </label>
           <label>
-            Aivis Cloud API スタイル ID
-            <span class="hint">省略可。モデル内の特定スタイルを指定する場合のみ入力（数値）</span>
-            <input type="number" id="setting-cloud-style-id" placeholder="省略可（数値）" autocomplete="off" min="0">
+            話し方（キャラクター別、任意）
+            <input type="text" id="setting-gemini-style" placeholder="例: 親しみやすく落ち着いて" autocomplete="off">
           </label>
         </div>
 
@@ -310,13 +287,11 @@
             <p>サインインすると、会話履歴や上記のプロファイル、設定情報がGoogle Driveに保存されます。<br>ファイルは「アプリ専用の隠しフォルダ（appDataFolder）」に保存されるため、普段のDrive画面からは見えず、間違って消す心配もありません。<br>スマホや別のPCから同じアカウントでログインするだけで、全く同じ記憶を引き継いで会話を再開できます。</p>
             
             <h3>💰推奨：Gemini API（AI Studio）の利用</h3>
-            <p>このアプリは「会話履歴を全件送信する」ことで強い記憶力を発揮します。OpenAIのAPIだと高額になりますが、<b>Google AI Studioで取得した無料枠のGemini APIキー</b>を使用すればコストは1円もかかりません。<br>（※LLMタブでendpointを <code>https://generativelanguage.googleapis.com/v1beta/openai/</code> 、modelに <code>gemini-2.5-flash</code> 等を指定してください）</p>
+            <p>Google AI Studioで取得したGemini APIキーを、LLMタブに1回入力します。会話・音声入力・読み上げで共用します。利用枠と料金はGoogle AI Studioで確認してください。</p>
 
             <h3>📱 スマホでの通信量について</h3>
             <p>大量の会話履歴を送受信しても、テキストの通信量はごくわずか（数メガバイト以下）です。<br>ただし、音声通話時（TTS）の音声データ通信にはデータを使用します。それでも動画視聴に比べれば非常に軽量で、屋外でも安心してご利用いただけます。</p>
 
-            <h3>🔊 スマートフォンで AivisSpeech を使う</h3>
-            <p>外出先のスマホから自宅 PC の AivisSpeech を使って喋らせるには、トンネル機能が必要です。<br>PC側で <code>start_aivis_with_tunnel.bat</code> を実行して発行された URL を、音声タブの設定に入力してください。<br>詳細は <a href="https://github.com/thousandsofties/AI-LiveTalk#README" target="_blank">GitHub の README</a> を参照してください。</p>
           </div>
         </div>
 

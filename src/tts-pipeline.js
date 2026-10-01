@@ -2,27 +2,27 @@
  * TTSパイプライン
  *
  * LLMのストリームチャンクを受け取り、句読点で文を切り出して
- * AivisSpeechへの合成リクエストを並列投げしながら順番に再生する。
+ * 選択中のTTSへの合成リクエストを並列に送り、元の順番で再生する。
  *
  * フロー:
  *   LLMチャンク → 文分割 → [合成A] [合成B] [合成C] ...
- *                                ↓ 合成完了順に再生キューへ
+ *                                ↓ 元の順番で再生キューへ
  *                            再生A → 再生B → 再生C (直列再生)
  *                                 ↑
  *                         Aを再生している間にBを合成
  *
- * AivisSpeechが使えない場合はブラウザTTSにフォールバック。
+ * Gemini TTS へ送った音声を受信順に再生する。
  */
 export class TTSPipeline {
   /** @param {import('./speech.js').SpeechManager} speechManager */
   constructor(speechManager) {
     this._speech = speechManager;
+    this._client = speechManager.getTtsClient();
+    this._earlyPhrases = typeof this._client.synthesizeStream === 'function';
 
     // テキストバッファ（LLMチャンク蓄積）
     this._textBuf   = '';
-    // フォールバック用の全文テキスト
-    this._fullText  = '';
-    // 合成Promiseのキュー
+    // 合成Promiseまたは音声ストリームのキュー
     this._queue     = [];
     // 再生ループ実行中フラグ
     this._loopRunning  = false;
@@ -33,9 +33,11 @@ export class TTSPipeline {
     // 停止済みフラグ
     this._stopped   = false;
     this._abortController = new AbortController();
-    // 再生中の AudioBufferSourceNode
+    // 再生中のHTML Audio要素とPCM音声ノード
     this._currentSrc = null;
     this._currentFinish = null;
+    this._streamSources = null;
+    this._enqueuedCount = 0;
     // 最初の一言を再生開始したか
     this._started   = false;
 
@@ -58,11 +60,8 @@ export class TTSPipeline {
    */
   push(chunk) {
     if (this._stopped) return;
-    this._fullText += chunk;
-    if (this._speech._useAivis || this._speech._useCloud) {
-      this._textBuf += chunk;
-      this._extractSentences(false);
-    }
+    this._textBuf += chunk;
+    this._extractSentences(false);
   }
 
   /**
@@ -70,23 +69,12 @@ export class TTSPipeline {
    * @param {{ lang?: string }} ttsOptions
    * @returns {Promise<void>}
    */
-  async done(ttsOptions = {}) {
+  async done() {
     if (this._stopped) return;
-
-    if (this._speech._useAivis || this._speech._useCloud) {
-      // 残りのバッファを強制フラッシュ
-      this._extractSentences(true);
-      this._finished = true;
-      this._checkDone();
-      await this._donePromise;
-    } else {
-      // ブラウザTTS: 全文をまとめて読み上げ
-      const text = this._fullText.trim();
-      if (!text) return;
-      this._speech.onSpeechStart = () => this.onSpeechStart?.();
-      this._speech.onSpeechEnd   = () => this.onSpeechEnd?.();
-      await this._speech.speak(text, ttsOptions);
-    }
+    this._extractSentences(true);
+    this._finished = true;
+    this._checkDone();
+    await this._donePromise;
   }
 
   /** 再生を中断する */
@@ -119,19 +107,36 @@ export class TTSPipeline {
     }
     this._textBuf = this._textBuf.slice(lastEnd);
 
+    // 最初の二句は自然な区切りから先に合成し、再生中に次の音声を準備する。
+    // 短すぎる相づちは単独で読ませず、後続の句とまとめる。
+    while (!force && this._earlyPhrases && this._enqueuedCount < 2) {
+      const comma = [...this._textBuf.matchAll(/、/g)]
+        .find(item => this._textBuf.slice(0, item.index + 1).trim().length >= 6);
+      if (comma) {
+        const end = comma.index + 1;
+        this._enqueueSynth(this._textBuf.slice(0, end).trim());
+        this._textBuf = this._textBuf.slice(end);
+      } else break;
+    }
+
     if (force && this._textBuf.trim()) {
       this._enqueueSynth(this._textBuf.trim());
       this._textBuf = '';
     }
   }
 
-  /** 文をAivisSpeechまたはCloud APIで合成してキューに積み、再生ループを起動する */
+  /** 文を選択中のTTSで合成してキューに積み、再生ループを起動する */
   _enqueueSynth(text) {
     if (this._stopped) return;
+    this._enqueuedCount++;
+    if (this._speech._streamAudioCtx && typeof this._client.synthesizeStream === 'function') {
+      this._queue.push({ stream: this._client.synthesizeStream(text, { signal: this._abortController.signal }) });
+      this._kickLoop();
+      return;
+    }
     this._inFlight++;
 
-    // ローカル AivisSpeech を優先し、未利用時のみ Cloud API を使用する (Local > Cloud)
-    const client = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
+    const client = this._client;
 
     // 合成は即座に開始（再生を待たない）
     const audioPromise = client.synthesize(text, { signal: this._abortController.signal })
@@ -152,9 +157,13 @@ export class TTSPipeline {
 
   async _runLoop() {
     while (this._queue.length > 0) {
-      const audioPromise = this._queue.shift();
+      const item = this._queue.shift();
       try {
-        const audioBuffer = await audioPromise;
+        if (item.stream) {
+          await this._playPcmStream(item.stream);
+          continue;
+        }
+        const audioBuffer = await item;
         if (this._stopped) continue;
 
         if (!this._started) {
@@ -170,6 +179,62 @@ export class TTSPipeline {
     }
     this._loopRunning = false;
     this._checkDone();
+  }
+
+  /** Gemini から届いた PCM を順に鳴らす。 */
+  async _playPcmStream(stream) {
+    const context = this._speech._streamAudioCtx;
+    await context.resume();
+    const sources = new Set();
+    this._streamSources = sources;
+    let nextStart = context.currentTime;
+    let lastEnd = Promise.resolve();
+    let carry = null;
+    let completed = false;
+    try {
+      for await (const chunk of stream) {
+        if (this._stopped) break;
+        let bytes = new Uint8Array(chunk);
+        if (carry !== null) {
+          const joined = new Uint8Array(bytes.length + 1);
+          joined[0] = carry;
+          joined.set(bytes, 1);
+          bytes = joined;
+          carry = null;
+        }
+        if (bytes.length % 2) {
+          carry = bytes[bytes.length - 1];
+          bytes = bytes.subarray(0, -1);
+        }
+        if (!bytes.length) continue;
+
+        const samples = bytes.length / 2;
+        const buffer = context.createBuffer(1, samples, 24000);
+        const output = buffer.getChannelData(0);
+        const pcm = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        for (let i = 0; i < samples; i++) output[i] = pcm.getInt16(i * 2, true) / 32768;
+
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(context.destination);
+        lastEnd = new Promise(resolve => {
+          source.onended = () => { sources.delete(source); resolve(); };
+        });
+        sources.add(source);
+        const start = Math.max(nextStart, context.currentTime + 0.02);
+        source.start(start);
+        nextStart = start + buffer.duration;
+        if (!this._started) {
+          this._started = true;
+          this.onSpeechStart?.();
+        }
+      }
+      await lastEnd;
+      completed = true;
+    } finally {
+      if (!completed) for (const source of sources) { try { source.stop(); } catch { /* already stopped */ } }
+      if (this._streamSources === sources) this._streamSources = null;
+    }
   }
 
   /** 全て完了したか確認し、完了していれば Promise を解決する */
@@ -193,7 +258,7 @@ export class TTSPipeline {
    * <audio> 要素を使う（iOS でも安定して動作する）。
    */
   async _playBuffer(rawBuffer) {
-    const client   = this._speech._useAivis ? this._speech._aivis : this._speech._cloud;
+    const client   = this._client;
     const mimeType = client.mimeType ?? 'audio/mpeg';
 
     const blob = new Blob([rawBuffer], { type: mimeType });
@@ -241,6 +306,11 @@ export class TTSPipeline {
 
   /** 再生を停止する */
   _stopCurrentAudio() {
+    if (this._streamSources) {
+      for (const source of this._streamSources) { try { source.stop(); } catch { /* already stopped */ } }
+      this._streamSources.clear();
+      this._streamSources = null;
+    }
     if (this._currentSrc) {
       if (this._currentSrc instanceof Audio) {
         try { this._currentSrc.pause(); this._currentSrc.src = ''; } catch { /* ignore */ }

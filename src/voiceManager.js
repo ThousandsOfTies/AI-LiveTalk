@@ -33,9 +33,6 @@ const SVG = {
     <path d="M2 16.5 L8.5 10 L13.5 15 L17 11.5 L22 16.5" stroke="#aaa" stroke-width="1.8" stroke-linejoin="round"/>
   </svg>`,
 
-  noisy: `<svg viewBox="0 0 24 24" width="30" height="30" xmlns="http://www.w3.org/2000/svg" style="pointer-events:none">
-    <text x="12" y="17" text-anchor="middle" font-size="17" fill="white">✦</text>
-  </svg>`,
 };
 
 const STATUS_BY_MODE = {
@@ -93,7 +90,6 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMe
     if (_inputMode === MODE.RALLY && !_speech.isListening) startListeningOnce();
     _updateUI();
   };
-  _speech.onNoiseModeChange = _updateUI;
 
   _initModePicker();
   _registerListeners();
@@ -106,7 +102,6 @@ export function initVoiceManager({ speech, llm, micBtn, sendBtn, stopBtn, sendMe
 }
 
 function _pickIcon(isListening) {
-  if (isListening && _speech.isNoisy) return SVG.noisy;
   if (_inputMode === MODE.RALLY)      return SVG.rally;
   if (_inputMode === MODE.CAMERA)     return SVG.camera;
   if (_inputMode === MODE.GALLERY)    return SVG.gallery;
@@ -119,7 +114,6 @@ function _updateUI() {
 
   _micBtn.classList.toggle('active',      isListening);
   _micBtn.classList.toggle('auto-listen', _inputMode === MODE.RALLY);
-  _micBtn.classList.toggle('noisy-mode',  _speech.isNoisy);
   _micBtn.innerHTML = _pickIcon(isListening);
 
   _micBtn.disabled  = isSpeaking;
@@ -128,7 +122,7 @@ function _updateUI() {
   _sendBtn.classList.toggle('hidden', isSpeaking);
 
   if (isListening) {
-    setStatus(_speech.isNoisy ? '✦ 高精度認識中...' : '🎤 聞いています...');
+    setStatus('🎤 Geminiで聞いています...');
     _micBtn.title = '音声入力中 (クリックで停止)';
   } else if (isSpeaking) {
     setStatus('AI 発話中...');
@@ -225,12 +219,10 @@ function _registerListeners() {
   _micBtn.addEventListener('pointerdown', () => {
     if (_micBtn.disabled) return;
     _speech.unlockAudio();
-    _speech.startNoiseMonitoring();
     _longPressTriggered = false;
     _longPressTimer = setTimeout(() => {
       _longPressTimer     = null;
       _longPressTriggered = true;
-      _speech.stopNoiseMonitoring();
       _showModePicker();
     }, LONG_PRESS_MS);
   });
@@ -239,8 +231,8 @@ function _registerListeners() {
     _clearLongPress();
     if (_longPressTriggered) return;
 
-    if (_inputMode === MODE.CAMERA)  { _speech.stopNoiseMonitoring(); _openCamera?.();  return; }
-    if (_inputMode === MODE.GALLERY) { _speech.stopNoiseMonitoring(); _openGallery?.(); return; }
+    if (_inputMode === MODE.CAMERA)  { _openCamera?.();  return; }
+    if (_inputMode === MODE.GALLERY) { _openGallery?.(); return; }
 
     if (_inputMode === MODE.RALLY) {
       _setMode(MODE.MIC);
@@ -254,10 +246,8 @@ function _registerListeners() {
 
   _micBtn.addEventListener('pointerleave', () => {
     _clearLongPress();
-    if (!_speech.isListening) _speech.stopNoiseMonitoring();
   });
   _micBtn.addEventListener('pointercancel', () => {
     _clearLongPress();
-    if (!_speech.isListening) _speech.stopNoiseMonitoring();
   });
 }

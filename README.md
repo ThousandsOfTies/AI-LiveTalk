@@ -8,13 +8,14 @@ VRM キャラクターと LLM を組み合わせた 3D AI アシスタント Web
 ## 機能
 
 - **VRM モデル表示** — VRoid Studio などで作成した `.vrm` ファイルを読み込んで表示
-- **LLM チャット** — OpenAI 互換 API（OpenAI / Gemini / Ollama など）でキャラクターと会話
+- **LLM チャット** — Gemini API でキャラクターと会話
 - **マルチモーダル入力** — カメラ撮影・端末内画像ファイルを LLM に渡してキャラクターが解釈・反応
 - **入力モード切替** — マイクボタン長押しで「ワンショット / ラリーモード / カメラ / ギャラリー」をピッカーで選択
 - **発話中断** — AI が喋っている間だけ「停止」ボタンが現れ、TTS と LLM ストリームを即座に中断
 - **感情表現** — LLM の返答に応じてキャラクターの表情・モーション (VRMA) が変化
-- **音声合成 (TTS)** — AivisSpeech（ローカル）/ Aivis Cloud API / ブラウザ TTS にフォールバック
-- **音声入力 (STT)** — マイクからの音声入力に対応 (騒音時は Gemini Audio へ自動切替)
+- **音声合成 (TTS)** — Gemini TTS でキャラクターの声を再生
+- **Gemini 音声ラボ** — 声を文章から作成し、同じセリフで聴き比べて本体のTTSに設定
+- **音声入力 (STT)** — マイク音声を Gemini で文字起こし
 - **長期記憶（プロファイリング）** — 会話からユーザーの特徴を秘密裏に分析・記憶
 - **Google Drive 同期** — 設定・会話履歴・プロファイル・VRM ファイルを Google Drive に保存・同期
 - **オフライン対応** — Google Drive 未使用時は IndexedDB にローカル保存
@@ -24,28 +25,22 @@ VRM キャラクターと LLM を組み合わせた 3D AI アシスタント Web
 ### 必要なもの
 
 - モダンブラウザ（Chrome / Edge / Safari）
-- OpenAI 互換 API のエンドポイントと API キー
+- Google AI Studio で作成した Gemini API キー
 
 ### 設定手順
 
 1. アプリを開き、右上の **⚙️ 設定** をクリック
-2. **LLM タブ** で APIエンドポイント・APIキー・モデル名を入力して保存
-3. （任意）**音声タブ** で高精度STT、AivisSpeech または Aivis Cloud API を設定
+2. **LLM タブ** で Gemini APIキーと会話モデル名を入力して保存。このキーを音声入力と読み上げにも使用します
+3. **音声タブ** で音声認識モデル、読み上げモデル、Voice IDを設定
 4. （任意）ヘッダーの **☁ サインイン** から Google アカウントでサインインすると設定が自動同期
 
-### LLM 設定例
+### モデル設定
 
-| サービス | エンドポイント | モデル名 |
-|---|---|---|
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
-| Ollama (ローカル) | `http://localhost:11434/v1` | `llama3.2` など |
-
-> 📷 **画像入力（カメラ・ギャラリー）を使う場合は、ビジョン対応モデル（`gpt-4o-mini` / `gemini-2.5-flash` 等）を選択してください。** Ollamaの軽量モデルなどビジョン非対応のモデルでは画像送信時にエラーになります。
+会話モデルには `gemini-3.1-flash-lite-preview` などの Gemini モデル名を入力できます。音声認識の初期値は `gemini-3.5-flash-lite`、読み上げは Gemini 3.8 Flash TTS 系です。
 
 LLMへ送る過去の会話量は、LLMタブの「コンテキスト長（直近の会話往復数）」で調整できます。`0`にすると過去履歴を送らず、現在の発言だけを送信します。
 
-騒音時のGemini Audio音声認識は、音声タブにある専用のエンドポイント・APIキー・モデル名を使用します。LLM用のAPIキーは自動流用されません。
+音声入力・読み上げは、会話用に入力した Gemini APIキーを共用します。Voice IDは同じGoogle Cloudプロジェクトで作成してください。
 
 ## 使い方
 
@@ -76,39 +71,22 @@ LLMへ送る過去の会話量は、LLMタブの「コンテキスト長（直�
 
 AI が喋っている間だけ、送信ボタンの位置に「停止」ボタンが現れます。タップすると TTS 再生と LLM ストリームの両方を即座に中断します。STT が誤認識して長文応答が始まったときに便利です。
 
-## 音声合成 (AivisSpeech) の連携
-
-AI-LiveTalk はローカルで動作する [AivisSpeech](https://aivis-project.com/) と連携して、高品質な日本語音声を再生できます。
-
-### 1. AivisSpeech の準備
-AivisSpeech Engine をインストールし、本リポジトリに含まれる以下のバッチファイルを使用して起動してください。
-
-- **`start_aivis_local.bat`** — 同じ PC のブラウザから利用する場合。
-- **`start_aivis_with_tunnel.bat`** — スマートフォンなどの外部ネットワークから利用する場合（トンネル機能）。
-
-### 2. スマートフォンからの利用 (外部公開)
-`start_aivis_with_tunnel.bat` を実行すると、トンネル方式を選択できます。
-
-- **localhost.run** (推奨): アカウント不要で即座に HTTPS URL が発行されます。
-- **Pinggy**: SSH を利用した代替手段です。
-- **Cloudflare**: `cloudflared` がインストールされている場合に使用可能です。
-
-発行された URL（例: `https://xxxx.lhr.life`）を、アプリの **設定 > 音声タブ > AivisSpeech URL** に貼り付けて保存してください。
-
-#### 自動起動設定
-引数として番号を指定すると、メニューをスキップして自動起動できます。
-```powershell
-# localhost.run で自動起動する場合
-.\start_aivis_with_tunnel.bat 1
-```
-
 ## ローカル開発
 
 ```bash
 npm install
-npm run dev        # Vite dev server (localhost:3000)
-npm run dev:server # Express server (localhost:3003)
+npm run dev        # Vite dev server (localhost:5173)
 ```
+
+### Gemini 音声ラボ
+
+設定の音声タブから「ボイス作成」を押して音声ラボを開きます。ラボはLLMタブのGemini APIキーを自動で使うため、再入力は不要です。声の説明を編集して「新しい声を作る」を押してください。作成後は「この声で日本語を試聴」を押し、同じ試聴文と演技で比較できます。WAV保存にも対応します。Geminiが声の作成時に返す自動サンプルは、試聴文を指定できないため再生しません。
+
+「試聴用TTSモデル」は読み上げ時だけに使います。声の作成リクエストはモデルを指定せず、作成したVoice IDをFlashとFlash-Liteのどちらでも試せます。
+
+気に入ったVoice IDをコピーし、本体の「設定 → 音声 → Gemini TTS」にモデルとVoice IDを入力します。APIキーはLLMタブの共通キーを使います。Voice IDと演技は男女キャラクター別に保存されます。本体の共通APIキーは他の設定と同様に保存・同期されます。Voice IDは作成時と同じGoogle CloudプロジェクトのAPIキーで使用してください。
+
+音声ラボの「一覧から削除」はブラウザの候補一覧だけを消し、Gemini側に保存された声は残ります。実際の音声生成にはGemini APIの利用枠・料金が適用されます。
 
 ### 環境変数 (`.env`)
 
@@ -117,15 +95,15 @@ VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id
 ```
 
 Google OAuth クライアント ID は [Google Cloud Console](https://console.cloud.google.com/) で取得してください。
-承認済みの JavaScript 生成元に `http://localhost:3000` と本番 URL を追加してください。
+承認済みの JavaScript 生成元に、実際に開くローカル URL（例: `http://127.0.0.1:5173`）と本番 URL を追加してください。
 
 ## デプロイ
 
 GitHub Actions で `main` ブランチへの push 時に GitHub Pages へ自動デプロイされます。
 
-GitHub リポジトリの Secrets に以下を設定してください：
+GitHub リポジトリの **Settings → Secrets and variables → Actions → Variables** に以下を設定してください。OAuth クライアント ID は公開される値のため Secret にする必要はありません。既存の同名 Secret は移行中も使用できますが、Variable が優先されます。
 
-| Secret | 内容 |
+| Variable | 内容 |
 |---|---|
 | `VITE_GOOGLE_CLIENT_ID` | Google OAuth クライアント ID |
 

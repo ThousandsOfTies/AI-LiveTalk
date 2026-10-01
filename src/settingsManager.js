@@ -17,9 +17,13 @@ import {
 } from './personaManager.js';
 import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
 import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
+import { provideGeminiApiKey } from './gemini-key-bridge.js';
+
+const GEMINI_LLM_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/';
 
 let _viewer, _llm, _speech, _driveSync, _storage;
 let _saveSettingsTimer = null;
+let _closeKeyBridge = null;
 
 export function initSettingsManager({ viewer, llm, speech, driveSync, storage }) {
   _viewer    = viewer;
@@ -27,6 +31,14 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
   _speech    = speech;
   _driveSync = driveSync;
   _storage   = storage;
+
+  _closeKeyBridge?.();
+  _closeKeyBridge = provideGeminiApiKey(() => {
+    const panel = document.getElementById('settings-panel');
+    return panel && !panel.classList.contains('hidden')
+      ? document.getElementById('setting-api-key').value
+      : _llm.apiKey;
+  });
 
   // タブ切り替え
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -47,7 +59,6 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
   document.getElementById('settings-btn').addEventListener('click', _openSettings);
   document.getElementById('save-settings-btn').addEventListener('click', _saveSettingsHandler);
   document.getElementById('cancel-settings-btn').addEventListener('click', _cancelSettings);
-  document.getElementById('aivis-check-btn').addEventListener('click', _checkAivis);
   document.getElementById('clear-history-btn').addEventListener('click', _clearHistory);
 
   // Drive 自動保存チェックボックス
@@ -58,7 +69,6 @@ export function initSettingsManager({ viewer, llm, speech, driveSync, storage })
   });
 
   _registerSliderListeners();
-  _registerCloudStatusListeners();
 }
 
 // ---- Public API ----
@@ -79,8 +89,7 @@ export async function switchPersona() {
   applyPersonaDataToVRM();
   const d  = getPersonaData();
   const ss = _speech.getSettings();
-  _speech.updateAivisSettings(ss.aivis_url || _speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(ss.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
+  _speech.updateGeminiSettings(_llm.apiKey, ss.gemini_tts_model, d.geminiVoiceId, d.geminiStyle);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -131,15 +140,18 @@ export function applySettings(s) {
     return;
   }
   personaApplySettings(s);
-  _llm.applySettings(s);
+  // 旧設定にキーが複数ある場合、保存済み Voice ID と同じプロジェクトの TTS キーを優先する。
+  const hasCustomVoice = ['female', 'male'].some(persona => getPersonaData(persona).geminiVoiceId);
+  const sharedKey = (hasCustomVoice && s.gemini_tts_api_key)
+    || s.llm_api_key || s.gemini_tts_api_key || s.stt_api_key || '';
+  _llm.applySettings({ ...s, llm_endpoint: GEMINI_LLM_ENDPOINT, llm_api_key: sharedKey });
   _speech.applySettings(s);
   historyApplySettings(s);
   locationApplySettings(s);
   vrmApplySettings(s);
 
   const d = getPersonaData();
-  _speech.updateAivisSettings(s.aivis_url || _speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(s.aivis_cloud_api_key || _speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
+  _speech.updateGeminiSettings(sharedKey, s.gemini_tts_model, d.geminiVoiceId, d.geminiStyle);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -154,14 +166,14 @@ export function resetToDefaults() {
   historyApplySettings({ autosave_history: 'true' });
   locationApplySettings({ location_enabled: 'false' });
   vrmApplySettings({ vrm_char_names: '{}', vrm_system_prompts: '{}' });
-  _llm.applySettings({});
+  _llm.applySettings({ llm_endpoint: GEMINI_LLM_ENDPOINT, llm_api_key: '' });
+  _llm.apiKey = '';
   _speech.applySettings({});
   _llm.clearHistory();
   _llm.userProfile = [];
 
   const d = getPersonaData();
-  _speech.updateAivisSettings(_speech._aivis.baseUrl, d.speakerId);
-  _speech.updateCloudSettings(_speech._cloud.apiKey, d.cloudModelUuid, d.cloudStyleId);
+  _speech.updateGeminiSettings('', 'gemini-3.8-flash-lite-tts', d.geminiVoiceId, d.geminiStyle);
   _viewer.setVRMArmCorrection(d.armCorrection);
   _viewer.setVRMAShoulderCorrection(d.shoulderCorrection);
   _viewer.setVRMAChestCorrection(d.chestCorrection);
@@ -188,7 +200,6 @@ export function resetToDefaults() {
  */
 export function refreshSettingsPanel() {
   const vrmState = getVrmState();
-  document.getElementById('setting-endpoint').value      = _llm.endpoint;
   document.getElementById('setting-api-key').value       = _llm.apiKey;
   document.getElementById('setting-model').value         = _llm.model;
   document.getElementById('setting-max-context-turns').value = _llm.maxContextTurns;
@@ -197,24 +208,16 @@ export function refreshSettingsPanel() {
   document.getElementById('setting-tts-lang').value      = _llm.ttsLang;
 
   const ss = _speech.getSettings();
-  document.getElementById('setting-stt-endpoint').value = ss.stt_endpoint || '';
-  document.getElementById('setting-stt-api-key').value  = ss.stt_api_key || '';
   document.getElementById('setting-stt-model').value    = ss.stt_model || '';
-  document.getElementById('setting-aivis-url').value = ss.aivis_url || 'http://127.0.0.1:10101';
 
   const d = getPersonaData();
-  const speakerSelect = document.getElementById('setting-aivis-speaker');
-  speakerSelect.innerHTML = `<option value="${d.speakerId}">${d.speakerId}</option>`;
-  speakerSelect.value = d.speakerId || '';
-
-  document.getElementById('setting-cloud-api-key').value    = ss.aivis_cloud_api_key || '';
-  document.getElementById('setting-cloud-model-uuid').value = d.cloudModelUuid || '';
-  document.getElementById('setting-cloud-style-id').value   = d.cloudStyleId || '';
+  document.getElementById('setting-gemini-tts-model').value = ss.gemini_tts_model || 'gemini-3.8-flash-tts';
+  document.getElementById('setting-gemini-voice-id').value = d.geminiVoiceId || '';
+  document.getElementById('setting-gemini-style').value = d.geminiStyle || '';
 
   const indEl = document.getElementById('voice-sex-indicator');
   if (indEl) indEl.textContent = getCurrentPersona() === 'female' ? '♀ 女性キャラの音声設定' : '♂ 男性キャラの音声設定';
 
-  _updateCloudStatus();
 
   const armCorr = d.armCorrection;
   document.getElementById('setting-arm-correction').value     = armCorr;
@@ -256,7 +259,10 @@ function _openSettings() {
 }
 
 function _saveSettingsHandler() {
-  _llm.endpoint = document.getElementById('setting-endpoint').value.trim();
+  const geminiModel = document.getElementById('setting-gemini-tts-model').value;
+  const geminiVoiceId = document.getElementById('setting-gemini-voice-id').value.trim();
+  const geminiStyle = document.getElementById('setting-gemini-style').value.trim();
+  _llm.endpoint = GEMINI_LLM_ENDPOINT;
   _llm.apiKey   = document.getElementById('setting-api-key').value.trim();
   _llm.model    = document.getElementById('setting-model').value.trim();
   _llm.maxContextTurns = Math.max(0, Math.min(100,
@@ -283,23 +289,10 @@ function _saveSettingsHandler() {
   _viewer.setVRMAChestCorrection(chestCorrection);
   updatePersonaData(getCurrentPersona(), { armCorrection, shoulderCorrection, chestCorrection });
 
-  const url           = document.getElementById('setting-aivis-url').value.trim();
-  const speakerId     = document.getElementById('setting-aivis-speaker').value.trim();
   const proactiveMode = document.getElementById('setting-proactive-mode')?.checked ?? false;
-  _speech.updateAivisSettings(url, speakerId);
-  updatePersonaData(getCurrentPersona(), { speakerId, isProactive: proactiveMode });
-
-  _speech.updateSttSettings(
-    document.getElementById('setting-stt-endpoint').value.trim(),
-    document.getElementById('setting-stt-api-key').value.trim(),
-    document.getElementById('setting-stt-model').value.trim(),
-  );
-
-  const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
-  const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
-  const styleId   = document.getElementById('setting-cloud-style-id').value.trim();
-  _speech.updateCloudSettings(apiKey, modelUuid, styleId);
-  updatePersonaData(getCurrentPersona(), { cloudModelUuid: modelUuid, cloudStyleId: styleId });
+  updatePersonaData(getCurrentPersona(), { isProactive: proactiveMode, geminiVoiceId, geminiStyle });
+  _speech.updateSttModel(document.getElementById('setting-stt-model').value);
+  _speech.updateGeminiSettings(_llm.apiKey, geminiModel, geminiVoiceId, geminiStyle);
 
   const profileText = document.getElementById('setting-user-profile').value;
   if (profileText !== undefined) {
@@ -318,47 +311,6 @@ function _saveSettingsHandler() {
   saveSettings();
   document.getElementById('settings-panel').classList.add('hidden');
   setStatus('設定を保存しました');
-}
-
-async function _checkAivis() {
-  const statusEl2 = document.getElementById('aivis-status');
-  const url       = document.getElementById('setting-aivis-url').value.trim();
-  const select    = document.getElementById('setting-aivis-speaker');
-  const currentId = select.value;
-
-  statusEl2.textContent = '確認中...';
-
-  try {
-    const res = await fetch(`${url.replace(/\/$/, '')}/speakers`);
-    if (!res.ok) throw new Error();
-    const speakers = await res.json();
-
-    select.innerHTML = '';
-    speakers.forEach(sp => {
-      sp.styles.forEach(st => {
-        const opt = document.createElement('option');
-        opt.value       = st.id;
-        opt.textContent = `${sp.name} (${st.name}) : ${st.id}`;
-        select.appendChild(opt);
-      });
-    });
-
-    if ([...select.options].some(o => o.value === currentId)) select.value = currentId;
-
-    _speech.updateAivisSettings(url, select.value);
-    statusEl2.textContent = '✅ AivisSpeech に接続し、リストを更新しました';
-  } catch {
-    statusEl2.innerHTML = `
-      <div style="color:#ff6b6b; margin-top:8px; border:1px solid #ff6b6b; padding:8px; border-radius:4px; font-size:12px; line-height:1.4;">
-        ❌ 接続に失敗しました<br><br>
-        <b>もっとも簡単な解決策:</b><br>
-        1. URLバー左の<b>「鍵マーク(または設定アイコン)」</b>をクリック<br>
-        2. <b>「サイトの設定」</b>を開く<br>
-        3. <b>「安全でないコンテンツ(Insecure content)」</b>を<b>「許可」</b>に変更<br>
-        4. このページを再読み込みして、もう一度更新してください。<br><br>
-        ※技術的な解決策: AivisSpeechを --cors_policy_mode all オプション付きで起動することでも解決します。
-      </div>`;
-  }
 }
 
 function _cancelSettings() {
@@ -398,30 +350,9 @@ function _registerSliderListeners() {
   }
 }
 
-function _updateCloudStatus() {
-  const apiKey    = document.getElementById('setting-cloud-api-key').value.trim();
-  const modelUuid = document.getElementById('setting-cloud-model-uuid').value.trim();
-  const styleId   = document.getElementById('setting-cloud-style-id').value.trim();
-  let msg;
-  if (!apiKey) {
-    msg = _speech._useAivis ? '✅ ローカル AivisSpeech 使用中' : '❌ ブラウザTTS使用中';
-  } else if (!modelUuid) {
-    msg = '⚠️ Cloud API: モデルUUIDが未設定';
-  } else {
-    msg = styleId ? `✅ Cloud API 使用中 (Style: ${styleId})` : '✅ Cloud API 使用中';
-  }
-  document.getElementById('aivis-status').textContent = msg;
-}
-
 function _updatePersonaToggle() {
   const persona = getCurrentPersona();
   document.querySelectorAll('.sex-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.sex === persona);
   });
-}
-
-function _registerCloudStatusListeners() {
-  document.getElementById('setting-cloud-api-key').addEventListener('input', _updateCloudStatus);
-  document.getElementById('setting-cloud-model-uuid').addEventListener('input', _updateCloudStatus);
-  document.getElementById('setting-cloud-style-id').addEventListener('input', _updateCloudStatus);
 }

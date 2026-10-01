@@ -6,9 +6,8 @@
 const _defaults = {
   female: {
     selectedVrmId:      '__builtin__',
-    speakerId:          '888753760',
-    cloudModelUuid:     '',
-    cloudStyleId:       '',
+    geminiVoiceId:      '',
+    geminiStyle:        '',
     background:         'bg/default.png',
     armCorrection:      0,
     shoulderCorrection: 0,
@@ -25,9 +24,8 @@ const _defaults = {
   },
   male: {
     selectedVrmId:      '__builtin_male__',
-    speakerId:          '888753760',
-    cloudModelUuid:     '',
-    cloudStyleId:       '',
+    geminiVoiceId:      '',
+    geminiStyle:        '',
     background:         'bg/default.png',
     armCorrection:      0,
     shoulderCorrection: 0,
@@ -95,7 +93,8 @@ export function applySettings(s) {
           }
         }
 
-        _personaData[persona] = { ..._defaults[persona], ...d, motionMap: mergedMotionMap };
+        const { speakerId, cloudModelUuid, cloudStyleId, ...currentData } = d;
+        _personaData[persona] = { ..._defaults[persona], ...currentData, motionMap: mergedMotionMap };
       }
     }
   }
