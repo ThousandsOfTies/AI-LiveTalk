@@ -135,17 +135,17 @@ export class GeminiTtsClient {
 
   isAvailable() { return !!(this.apiKey && this.voiceId); }
 
-  synthesize(text, { signal } = {}) {
+  synthesize(text, { signal, style = this.style } = {}) {
     return synthesizeGeminiSpeech({
       apiKey: this.apiKey, model: this.model, voiceId: this.voiceId,
-      style: this.style, text, signal,
+      style, text, signal,
     });
   }
 
-  synthesizeStream(text, { signal } = {}) {
+  synthesizeStream(text, { signal, style = this.style } = {}) {
     return streamGeminiSpeech({
       apiKey: this.apiKey, model: this.model, voiceId: this.voiceId,
-      style: this.style, text, signal,
+      style, text, signal,
     });
   }
 }

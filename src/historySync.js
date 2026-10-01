@@ -126,7 +126,10 @@ export async function loadHistoryAndProfile({
 
 function _forceSaveOnExit() {
   if (_autoSaveEnabled && _llm.history.length > 0) {
+    cancelAutoSave();
     console.log(`[HistorySync] 退避のための即時保存を実行します (件数: ${_llm.history.length})`);
-    _storage.saveHistory(_llm.history);
+    _storage.saveHistory(_llm.history).catch(err => {
+      console.error('[HistorySync] 退避時の履歴保存エラー:', err.message);
+    });
   }
 }

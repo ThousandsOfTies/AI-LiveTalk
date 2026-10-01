@@ -18,6 +18,7 @@ import {
 import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
 import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
 import { provideGeminiApiKey } from './gemini-key-bridge.js';
+import { DEFAULT_EMOTION_STYLES, normalizeEmotionStyles } from './emotion-styles.js';
 
 const GEMINI_LLM_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/';
 
@@ -214,6 +215,10 @@ export function refreshSettingsPanel() {
   document.getElementById('setting-gemini-tts-model').value = ss.gemini_tts_model || 'gemini-3.8-flash-tts';
   document.getElementById('setting-gemini-voice-id').value = d.geminiVoiceId || '';
   document.getElementById('setting-gemini-style').value = d.geminiStyle || '';
+  const emotionStyles = normalizeEmotionStyles(d.geminiEmotionStyles);
+  for (const emotion of Object.keys(DEFAULT_EMOTION_STYLES)) {
+    document.getElementById(`setting-gemini-style-${emotion}`).value = emotionStyles[emotion];
+  }
 
   const indEl = document.getElementById('voice-sex-indicator');
   if (indEl) indEl.textContent = getCurrentPersona() === 'female' ? '♀ 女性キャラの音声設定' : '♂ 男性キャラの音声設定';
@@ -262,6 +267,9 @@ function _saveSettingsHandler() {
   const geminiModel = document.getElementById('setting-gemini-tts-model').value;
   const geminiVoiceId = document.getElementById('setting-gemini-voice-id').value.trim();
   const geminiStyle = document.getElementById('setting-gemini-style').value.trim();
+  const geminiEmotionStyles = Object.fromEntries(Object.keys(DEFAULT_EMOTION_STYLES).map(emotion => [
+    emotion, document.getElementById(`setting-gemini-style-${emotion}`).value.trim(),
+  ]));
   _llm.endpoint = GEMINI_LLM_ENDPOINT;
   _llm.apiKey   = document.getElementById('setting-api-key').value.trim();
   _llm.model    = document.getElementById('setting-model').value.trim();
@@ -290,7 +298,7 @@ function _saveSettingsHandler() {
   updatePersonaData(getCurrentPersona(), { armCorrection, shoulderCorrection, chestCorrection });
 
   const proactiveMode = document.getElementById('setting-proactive-mode')?.checked ?? false;
-  updatePersonaData(getCurrentPersona(), { isProactive: proactiveMode, geminiVoiceId, geminiStyle });
+  updatePersonaData(getCurrentPersona(), { isProactive: proactiveMode, geminiVoiceId, geminiStyle, geminiEmotionStyles });
   _speech.updateSttModel(document.getElementById('setting-stt-model').value);
   _speech.updateGeminiSettings(_llm.apiKey, geminiModel, geminiVoiceId, geminiStyle);
 

@@ -641,6 +641,14 @@ body {
   flex-direction: column;
   gap: 14px;
 }
+
+.emotion-styles summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.emotion-styles label {
+  margin-top: 12px;
+}
 .tab-panel.active {
   display: flex;
   flex: 1;

@@ -32,6 +32,7 @@ export function initChatManager({
   _chatInput = document.getElementById('chat-input');
 
   _llm.onEmotionDetected = (emotion) => {
+    _activePipeline?.setEmotion(emotion);
     _viewer.applyEmotion(emotion);
     setStatus(`感情: ${emotion}`);
     const vrmaMap = _getVrmaEmotionMap();
@@ -166,7 +167,7 @@ export async function sendMessage(text, options = {}) {
   _lipSync.stop();
   _viewer.stopTalking();
 
-  const pipeline   = new TTSPipeline(_speech);
+  const pipeline   = new TTSPipeline(_speech, { emotionStyles: getPersonaData().geminiEmotionStyles });
   _activePipeline  = pipeline;
   let ttsError = false;
 
@@ -215,8 +216,8 @@ export async function sendMessage(text, options = {}) {
     }
     textNode.textContent = spokenText;
 
-    await pipeline.done({ lang: _llm.ttsLang });
     _scheduleHistorySave();
+    await pipeline.done({ lang: _llm.ttsLang });
 
   } catch (err) {
     const wasAborted = err?.name === 'AbortError';

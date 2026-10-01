@@ -13,11 +13,16 @@
  *
  * Gemini TTS へ送った音声を受信順に再生する。
  */
+import { combineSpeechStyle } from './emotion-styles.js';
+
 export class TTSPipeline {
   /** @param {import('./speech.js').SpeechManager} speechManager */
-  constructor(speechManager) {
+  constructor(speechManager, { emotionStyles = {} } = {}) {
     this._speech = speechManager;
     this._client = speechManager.getTtsClient();
+    this._baseStyle = this._client.style || '';
+    this._emotionStyles = { ...emotionStyles };
+    this._emotion = 'neutral';
     this._earlyPhrases = typeof this._client.synthesizeStream === 'function';
 
     // テキストバッファ（LLMチャンク蓄積）
@@ -53,6 +58,10 @@ export class TTSPipeline {
   }
 
   // ---- 公開 API ----
+
+  setEmotion(emotion) {
+    this._emotion = emotion;
+  }
 
   /**
    * LLMストリームのチャンクを受け取る
@@ -129,8 +138,9 @@ export class TTSPipeline {
   _enqueueSynth(text) {
     if (this._stopped) return;
     this._enqueuedCount++;
+    const style = combineSpeechStyle(this._baseStyle, this._emotion, this._emotionStyles);
     if (this._speech._streamAudioCtx && typeof this._client.synthesizeStream === 'function') {
-      this._queue.push({ stream: this._client.synthesizeStream(text, { signal: this._abortController.signal }) });
+      this._queue.push({ stream: this._client.synthesizeStream(text, { signal: this._abortController.signal, style }) });
       this._kickLoop();
       return;
     }
@@ -139,7 +149,7 @@ export class TTSPipeline {
     const client = this._client;
 
     // 合成は即座に開始（再生を待たない）
-    const audioPromise = client.synthesize(text, { signal: this._abortController.signal })
+    const audioPromise = client.synthesize(text, { signal: this._abortController.signal, style })
       .then(buf  => { this._inFlight--; return buf; })
       .catch(err => { this._inFlight--; throw err; });
 

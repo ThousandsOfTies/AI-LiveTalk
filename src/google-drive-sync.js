@@ -396,7 +396,6 @@ export class GoogleDriveSync {
     if (!onProgress) {
       return fetch(url, {
         method: 'PUT',
-        keepalive: true,
         headers: { 'Content-Type': 'application/octet-stream' },
         body: blob,
       }).then(res => {
@@ -429,8 +428,9 @@ export class GoogleDriveSync {
   // Authorization ヘッダーを付与、401 で自動サインアウト
   async _fetch(url, options = {}) {
     const headers = { ...options.headers, Authorization: `Bearer ${this._token}` };
-    // iOS Safariでバックグラウンド移行時(visibilitychange等)にリクエストがキャンセルされるのを防ぐため keepalive: true
-    const res = await fetch(url, { keepalive: true, ...options, headers });
+    // keepaliveは送信中の本文の合計が64KiBを超えるとネットワークエラーになる。
+    // 会話履歴やVRMは上限を超えるため、通常のfetchで保存する。
+    const res = await fetch(url, { ...options, headers });
     if (res.status === 401) {
       this._token = null;
       this._tokenExpiry = 0;

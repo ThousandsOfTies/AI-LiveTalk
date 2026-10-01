@@ -3,11 +3,14 @@
  * ※ 設定ファイルの保存キー名 ("current_sex", "sex") は後方互換のため維持
  */
 
+import { normalizeEmotionStyles } from './emotion-styles.js';
+
 const _defaults = {
   female: {
     selectedVrmId:      '__builtin__',
     geminiVoiceId:      '',
     geminiStyle:        '',
+    geminiEmotionStyles: normalizeEmotionStyles(),
     background:         'bg/default.png',
     armCorrection:      0,
     shoulderCorrection: 0,
@@ -26,6 +29,7 @@ const _defaults = {
     selectedVrmId:      '__builtin_male__',
     geminiVoiceId:      '',
     geminiStyle:        '',
+    geminiEmotionStyles: normalizeEmotionStyles(),
     background:         'bg/default.png',
     armCorrection:      0,
     shoulderCorrection: 0,
@@ -44,8 +48,8 @@ const _defaults = {
 
 let _currentPersona = 'female';
 let _personaData = {
-  female: { ..._defaults.female, motionMap: { ..._defaults.female.motionMap } },
-  male:   { ..._defaults.male,   motionMap: { ..._defaults.male.motionMap } },
+  female: { ..._defaults.female, motionMap: { ..._defaults.female.motionMap }, geminiEmotionStyles: normalizeEmotionStyles() },
+  male:   { ..._defaults.male,   motionMap: { ..._defaults.male.motionMap }, geminiEmotionStyles: normalizeEmotionStyles() },
 };
 
 export function getCurrentPersona() { return _currentPersona; }
@@ -61,13 +65,16 @@ export function getPersonaData(persona) {
 export function updatePersonaData(persona, updates) {
   if (!_personaData[persona]) return;
   Object.assign(_personaData[persona], updates);
+  if ('geminiEmotionStyles' in updates) {
+    _personaData[persona].geminiEmotionStyles = normalizeEmotionStyles(updates.geminiEmotionStyles);
+  }
 }
 
 export function resetToDefaults() {
   _currentPersona = 'female';
   _personaData = {
-    female: { ..._defaults.female, motionMap: { ..._defaults.female.motionMap } },
-    male:   { ..._defaults.male,   motionMap: { ..._defaults.male.motionMap } },
+    female: { ..._defaults.female, motionMap: { ..._defaults.female.motionMap }, geminiEmotionStyles: normalizeEmotionStyles() },
+    male:   { ..._defaults.male,   motionMap: { ..._defaults.male.motionMap }, geminiEmotionStyles: normalizeEmotionStyles() },
   };
 }
 
@@ -94,7 +101,10 @@ export function applySettings(s) {
         }
 
         const { speakerId, cloudModelUuid, cloudStyleId, ...currentData } = d;
-        _personaData[persona] = { ..._defaults[persona], ...currentData, motionMap: mergedMotionMap };
+        _personaData[persona] = {
+          ..._defaults[persona], ...currentData, motionMap: mergedMotionMap,
+          geminiEmotionStyles: normalizeEmotionStyles(d.geminiEmotionStyles),
+        };
       }
     }
   }
@@ -105,8 +115,8 @@ export function collectSettings() {
   return {
     current_sex: _currentPersona,
     sex: {
-      female: { ..._personaData.female, motionMap: { ..._personaData.female.motionMap } },
-      male:   { ..._personaData.male,   motionMap: { ..._personaData.male.motionMap } },
+      female: { ..._personaData.female, motionMap: { ..._personaData.female.motionMap }, geminiEmotionStyles: { ..._personaData.female.geminiEmotionStyles } },
+      male:   { ..._personaData.male,   motionMap: { ..._personaData.male.motionMap }, geminiEmotionStyles: { ..._personaData.male.geminiEmotionStyles } },
     },
   };
 }
