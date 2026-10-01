@@ -88,24 +88,17 @@ npm run dev        # Vite dev server (localhost:5173)
 
 音声ラボの「一覧から削除」はブラウザの候補一覧だけを消し、Gemini側に保存された声は残ります。実際の音声生成にはGemini APIの利用枠・料金が適用されます。
 
-### 環境変数 (`.env`)
+### Google ログインの設定
 
-```env
-VITE_GOOGLE_CLIENT_ID=your-google-oauth-client-id
-```
+Web用OAuthクライアントIDは公開設定として `src/google-drive-sync.js` の `CLIENT_ID` に記載しています。ローカル版と公開版で同じIDを使い、環境変数やGitHub ActionsのSecrets・Variablesの設定は不要です。
 
-Google OAuth クライアント ID は [Google Cloud Console](https://console.cloud.google.com/) で取得してください。
-承認済みの JavaScript 生成元に、実際に開くローカル URL（例: `http://127.0.0.1:5173`）と本番 URL を追加してください。
+別のGoogle Cloudプロジェクトで運用する場合は、[Google Cloud Console](https://console.cloud.google.com/) で取得したWeb用OAuthクライアントIDに `CLIENT_ID` を変更してください。承認済みのJavaScript生成元に、実際に開くローカルURL（例: `http://127.0.0.1:5173`）と本番URLを追加してください。
 
 ## デプロイ
 
 GitHub Actions で `main` ブランチへの push 時に GitHub Pages へ自動デプロイされます。
 
-GitHub リポジトリの **Settings → Secrets and variables → Actions → Variables** に以下を設定してください。OAuth クライアント ID は公開される値のため Secret にする必要はありません。既存の同名 Secret は移行中も使用できますが、Variable が優先されます。
-
-| Variable | 内容 |
-|---|---|
-| `VITE_GOOGLE_CLIENT_ID` | Google OAuth クライアント ID |
+OAuthクライアントIDはソースから組み込まれるため、Actions側の追加設定は不要です。
 
 ## 技術スタック
 

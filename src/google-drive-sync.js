@@ -1,4 +1,5 @@
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+// Web用OAuthクライアントIDは、ブラウザに配布される公開設定。
+const CLIENT_ID = '888182670603-uao3hafjm3hejfk5c3sgq2j9vkvi5ihf.apps.googleusercontent.com';
 const SCOPES = 'email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file';
 const SETTINGS_FILE = 'ailivetalk-settings.json';
 const VRM_FOLDER = 'AI-LiveTalk';
@@ -21,7 +22,6 @@ export class GoogleDriveSync {
   // ---- 初期化 ----
 
   async init() {
-    if (!CLIENT_ID) return;
     await this._loadGIS();
     this._tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
@@ -138,7 +138,6 @@ export class GoogleDriveSync {
   get isSignedIn() { return !!this._token; }
 
   signIn() {
-    if (!CLIENT_ID) throw new Error('Googleログイン用のOAuthクライアントIDが未設定です');
     if (!this._tokenClient) throw new Error('初期化中です。少し待ってからお試しください');
     // 既知のアカウントがあればヒントを渡す（アカウント選択をスキップできる場合がある）
     const opts = this._email ? { prompt: '', hint: this._email } : { prompt: 'select_account' };
