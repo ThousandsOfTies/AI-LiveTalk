@@ -4,7 +4,7 @@ import { LLMClient, DEFAULT_MALE_SYSTEM_PROMPT } from './llm-client.js';
 import { BUILTIN_FEMALE_ID, BUILTIN_MALE_ID } from './constants.js';
 
 let _viewer, _storage, _llm, _canvas, _saveSettings;
-let _vrmModelSelect, _vrmFileInput, _vrmLoadStatus, _vrmaPresetSelect, _loadVRMABtn, _vrmaFileInput;
+let _vrmModelSelect, _vrmFileInput, _vrmLoadStatus;
 
 let _currentVrmId     = getPersonaData().selectedVrmId;
 let _vrmCharNames     = {};
@@ -23,9 +23,6 @@ export function initVRMManager({ viewer, storage, llm, canvas, saveSettings }) {
   _vrmModelSelect   = document.getElementById('vrm-model-select');
   _vrmFileInput     = document.getElementById('vrm-file-input');
   _vrmLoadStatus    = document.getElementById('vrm-load-status');
-  _vrmaPresetSelect = document.getElementById('vrma-preset-select');
-  _loadVRMABtn      = document.getElementById('load-vrma-btn');
-  _vrmaFileInput    = document.getElementById('vrma-file-input');
 
   _registerListeners();
 }
@@ -81,7 +78,6 @@ export function resolveVrmaUrl(path) {
 // ---- VRMA ----
 export async function loadDefaultVRMA(isIdle = false) {
   await _viewer.loadVRMA(resolveVrmaUrl(_vrmaEmotionMap.neutral), { loop: true, isIdle });
-  _vrmaPresetSelect.value = 'neutral';
 }
 
 // ---- VRM ----
@@ -150,7 +146,6 @@ export async function loadBuiltinVRM() {
     }
     setStatus('デフォルトモーション適用中...');
     await loadDefaultVRMA(true);
-    _vrmaPresetSelect.value = 'neutral';
     setStatus('');
     captureAiAvatar();
   } catch (err) {
@@ -316,44 +311,6 @@ function _registerListeners() {
   _vrmModelSelect.addEventListener('change', (e) => _handleVrmSelect(e.target.value));
 
   document.getElementById('vrm-add-btn').addEventListener('click', () => _vrmFileInput.click());
-
-  _loadVRMABtn.addEventListener('click', () => _vrmaFileInput.click());
-
-  _vrmaFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const emotion = _vrmaPresetSelect.value || 'neutral';
-    setStatus(`「${_vrmaPresetSelect.options[_vrmaPresetSelect.selectedIndex].text}」のモーションを置き換え中...`);
-    _loadVRMABtn.disabled = true;
-    try {
-      const blobUrl = URL.createObjectURL(file);
-      _vrmaEmotionMap[emotion] = blobUrl;
-      await _viewer.loadVRMA(blobUrl, { loop: true, isIdle: emotion === 'neutral' });
-      setStatus(`✅ ${_vrmaPresetSelect.options[_vrmaPresetSelect.selectedIndex].text} のモーションを更新しました`);
-    } catch (err) {
-      setStatus(`VRMAエラー: ${err.message}`);
-      console.error(err);
-    } finally {
-      _loadVRMABtn.disabled  = false;
-      _vrmaFileInput.value   = '';
-    }
-  });
-
-  _vrmaPresetSelect.addEventListener('change', async () => {
-    const emotion     = _vrmaPresetSelect.value;
-    const prevEmotion = _vrmaPresetSelect.dataset.current ?? 'neutral';
-    setStatus('モーション読み込み中...');
-    try {
-      const url = resolveVrmaUrl(_vrmaEmotionMap[emotion] || _vrmaEmotionMap.neutral);
-      await _viewer.loadVRMA(url, { loop: true, isIdle: emotion === 'neutral' });
-      _vrmaPresetSelect.dataset.current = emotion;
-      setStatus('アニメーション再生中');
-    } catch (err) {
-      setStatus(`VRMAエラー: ${err.message}`);
-      _vrmaPresetSelect.value = prevEmotion;
-      console.error(err);
-    }
-  });
 
   _vrmFileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];

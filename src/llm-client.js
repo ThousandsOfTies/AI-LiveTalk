@@ -180,7 +180,7 @@ export class LLMClient {
               // 先頭の [EMO:xxx] タグ群を処理
               if (/^\s*\[/.test(prefixBuf) || prefixBuf.trim() === '') {
                 let m;
-                while ((m = prefixBuf.match(/\[EMO:([^\]]+)\]\s*/))) {
+                while ((m = prefixBuf.match(/\[EMO:([^\]]+)\]\s*/i))) {
                   this.onEmotionDetected?.(m[1].trim().toLowerCase());
                   prefixBuf = prefixBuf.replace(m[0], '');
                 }
@@ -190,7 +190,9 @@ export class LLMClient {
                 }
                 // まだ開始ブラケットがある、またはバッファが空（次の文字待ち）の場合は処理を保留
                 if (/^\s*\[/.test(prefixBuf) || prefixBuf.trim() === '') {
-                  if (prefixBuf.length > 80 || prefixBuf.includes('\n')) {
+                  // 先頭の改行や空白だけで本文に切り替えない。
+                  // ストリームで分割された感情タグが揃うまで待つ。
+                  if (prefixBuf.trim().length > 80) {
                     // 諦めて出力
                     emotionParsed = true;
                     assistantMessage += prefixBuf;
