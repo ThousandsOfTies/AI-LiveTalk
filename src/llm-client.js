@@ -21,7 +21,7 @@ const EMOTION_INSTRUCTION = `
 const DEFAULTS = {
   endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/',
   apiKey: '',
-  model: 'gemini-3.1-flash-lite-preview',
+  model: 'gemini-3.5-flash-lite',
   systemPrompt: `あなたの名前はリリムです。あなたは私の親しい女の子の友達です。タメ口で、フレンドリーにおしゃべりしてください。
 AIアシスタントのような「何かお手伝いしましょうか？」といった堅苦しい発言やサポート役としての態度は禁止です。
 基本的には長文になりすぎないよう、簡潔な日本語で会話を弾ませてください。`,
@@ -57,12 +57,18 @@ export class LLMClient {
   applySettings(s) {
     if (s.llm_endpoint)     this.endpoint     = s.llm_endpoint;
     if (s.llm_api_key)      this.apiKey       = s.llm_api_key;
-    if (s.llm_model)        this.model        = s.llm_model;
+    if (s.llm_model !== undefined) this.updateModel(s.llm_model);
     if (s.llm_system_prompt !== undefined) this.systemPrompt = s.llm_system_prompt;
     if (s.llm_tts_lang)     this.ttsLang      = s.llm_tts_lang;
     if (s.llm_max_context_turns !== undefined) {
       this.maxContextTurns = normalizeContextTurns(s.llm_max_context_turns);
     }
+  }
+
+  updateModel(model) {
+    const name = model?.trim() || DEFAULTS.model;
+    // 廃止された旧初期値は、保存済み設定を移行するためだけに判定する。
+    this.model = name === 'gemini-3.1-flash-lite-preview' ? DEFAULTS.model : name;
   }
 
   /** 現在の設定をオブジェクトとして返す */

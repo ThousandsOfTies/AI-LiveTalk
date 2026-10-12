@@ -159,6 +159,8 @@ export function applySettings(s) {
   applyBackground(d.background);
   applyPersonaDataToVRM();
   _updatePersonaToggle();
+
+  if (s.llm_model !== undefined && s.llm_model !== _llm.model) saveSettings();
 }
 
 export function resetToDefaults() {
@@ -167,7 +169,7 @@ export function resetToDefaults() {
   historyApplySettings({ autosave_history: 'true' });
   locationApplySettings({ location_enabled: 'false' });
   vrmApplySettings({ vrm_char_names: '{}', vrm_system_prompts: '{}' });
-  _llm.applySettings({ llm_endpoint: GEMINI_LLM_ENDPOINT, llm_api_key: '' });
+  _llm.applySettings({ llm_endpoint: GEMINI_LLM_ENDPOINT, llm_api_key: '', llm_model: '' });
   _llm.apiKey = '';
   _speech.applySettings({});
   _llm.clearHistory();
@@ -272,7 +274,7 @@ function _saveSettingsHandler() {
   ]));
   _llm.endpoint = GEMINI_LLM_ENDPOINT;
   _llm.apiKey   = document.getElementById('setting-api-key').value.trim();
-  _llm.model    = document.getElementById('setting-model').value.trim();
+  _llm.updateModel(document.getElementById('setting-model').value);
   _llm.maxContextTurns = Math.max(0, Math.min(100,
     Number.parseInt(document.getElementById('setting-max-context-turns').value, 10) || 0
   ));

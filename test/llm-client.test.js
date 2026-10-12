@@ -22,6 +22,39 @@ test('コンテキスト往復数を0〜100に正規化する', () => {
   assert.equal(normalizeContextTurns('invalid'), 20);
 });
 
+test('保存済みの廃止モデルを移行して送信・再保存し、現行モデルの指定は維持する', async (t) => {
+  let sentBody;
+  t.mock.method(globalThis, 'fetch', async (_url, options) => {
+    sentBody = JSON.parse(options.body);
+    return sseResponse(['返答']);
+  });
+
+  for (const [savedModel, expectedModel] of [
+    ['gemini-3.1-flash-lite-preview', 'gemini-3.5-flash-lite'],
+    ['gemini-3.8-flash', 'gemini-3.8-flash'],
+  ]) {
+    const client = new LLMClient();
+    client.applySettings({
+      llm_model: savedModel,
+      llm_api_key: 'saved-key',
+      llm_system_prompt: '保存済みの指示',
+      llm_max_context_turns: '7',
+    });
+    for await (const _chunk of client.chat('質問')) {}
+
+    assert.equal(sentBody.model, expectedModel);
+    assert.match(sentBody.messages[0].content, /^保存済みの指示/);
+
+    const saved = JSON.parse(JSON.stringify(client.getSettings()));
+    assert.equal(saved.llm_model, expectedModel);
+    assert.equal(saved.llm_api_key, 'saved-key');
+    assert.equal(saved.llm_max_context_turns, '7');
+    const reloaded = new LLMClient();
+    reloaded.applySettings(saved);
+    assert.deepEqual(reloaded.getSettings(), saved);
+  }
+});
+
 test('指定した直近の往復だけを送信し、完了後に履歴を確定する', async (t) => {
   const client = new LLMClient();
   client.maxContextTurns = 1;
@@ -42,6 +75,7 @@ test('指定した直近の往復だけを送信し、完了後に履歴を確�
   for await (const chunk of client.chat('新しい質問')) response += chunk;
 
   assert.equal(response, '新しい回答');
+  assert.equal(sentBody.model, 'gemini-3.5-flash-lite');
   assert.deepEqual(sentBody.messages.slice(1, -1), client.history.slice(2, 4));
   assert.deepEqual(client.history.slice(-2), [
     { role: 'user', content: '新しい質問' },
